@@ -1,0 +1,33 @@
+CREATE TABLE IF NOT EXISTS cards (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  language TEXT NOT NULL DEFAULT 'de',
+  prompt TEXT NOT NULL,
+  answer TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS drills (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  started_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS drill_cards (
+  drill_id INTEGER NOT NULL,
+  card_id INTEGER NOT NULL,
+  PRIMARY KEY (drill_id, card_id),
+  FOREIGN KEY (drill_id) REFERENCES drills (id) ON DELETE CASCADE,
+  FOREIGN KEY (card_id) REFERENCES cards (id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS attempts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  drill_id INTEGER NOT NULL,
+  card_id INTEGER NOT NULL,
+  result TEXT NOT NULL CHECK(result IN ('right', 'wrong')),
+  answered_with TEXT,
+  method TEXT NOT NULL CHECK(method IN ('input', 'swipe-left-know', 'swipe-right-dont-know')),
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (drill_id) REFERENCES drills (id) ON DELETE CASCADE,
+  FOREIGN KEY (card_id) REFERENCES cards (id) ON DELETE CASCADE
+);
+
