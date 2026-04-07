@@ -1,0 +1,9 @@
+CREATE TABLE IF NOT EXISTS translation_cache (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  source_text TEXT NOT NULL UNIQUE,
+  translated_text TEXT NOT NULL,
+  source_lang TEXT NOT NULL DEFAULT 'de',
+  target_lang TEXT NOT NULL DEFAULT 'en',
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+

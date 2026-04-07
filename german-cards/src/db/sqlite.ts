@@ -52,6 +52,15 @@ function runMigrations() {
       FOREIGN KEY (drill_id) REFERENCES drills (id) ON DELETE CASCADE,
       FOREIGN KEY (card_id) REFERENCES cards (id) ON DELETE CASCADE
     );
+
+    CREATE TABLE IF NOT EXISTS translation_cache (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      source_text TEXT NOT NULL UNIQUE,
+      translated_text TEXT NOT NULL,
+      source_lang TEXT NOT NULL DEFAULT 'de',
+      target_lang TEXT NOT NULL DEFAULT 'en',
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
   `);
 }
 
@@ -146,3 +155,23 @@ export async function getTotalStats(): Promise<TotalStats> {
   };
 }
 
+export async function getCachedTranslation(sourceText: string): Promise<string | null> {
+  await ensureDatabaseReady();
+  const row = db.getFirstSync<{ translated_text: string }>(
+    'SELECT translated_text FROM translation_cache WHERE source_text = ? LIMIT 1',
+    [sourceText.trim()]
+  );
+  return row?.translated_text ?? null;
+}
+
+export async function saveCachedTranslation(sourceText: string, translatedText: string): Promise<void> {
+  await ensureDatabaseReady();
+  db.runSync(
+    `
+      INSERT INTO translation_cache (source_text, translated_text)
+      VALUES (?, ?)
+      ON CONFLICT(source_text) DO UPDATE SET translated_text = excluded.translated_text
+    `,
+    [sourceText.trim(), translatedText.trim()]
+  );
+}

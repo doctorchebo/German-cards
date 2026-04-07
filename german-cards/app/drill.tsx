@@ -1,4 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import * as Speech from 'expo-speech';
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -30,6 +32,7 @@ export default function DrillScreen() {
   const [right, setRight] = useState(0);
   const [wrong, setWrong] = useState(0);
   const [wrongCardIds, setWrongCardIds] = useState<number[]>([]);
+  const [speaking, setSpeaking] = useState(false);
 
   const retryIds = useMemo(
     () =>
@@ -43,6 +46,7 @@ export default function DrillScreen() {
   useEffect(() => {
     preloadFeedbackSounds();
     return () => {
+      Speech.stop();
       unloadFeedbackSounds();
     };
   }, []);
@@ -109,6 +113,23 @@ export default function DrillScreen() {
     await submitResult(correct, 'input');
   };
 
+  const onPressSpeaker = () => {
+    if (!currentCard || speaking) return;
+    const visibleText = revealed ? currentCard.answer : currentCard.prompt;
+    const language = revealed ? 'en-US' : 'de-DE';
+
+    Speech.stop();
+    setSpeaking(true);
+    Speech.speak(visibleText, {
+      language,
+      rate: 0.95,
+      pitch: 1.0,
+      onStopped: () => setSpeaking(false),
+      onDone: () => setSpeaking(false),
+      onError: () => setSpeaking(false),
+    });
+  };
+
   if (!session || !currentCard) {
     return (
       <SafeAreaView style={styles.safeArea}>
@@ -122,9 +143,17 @@ export default function DrillScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
-        <Text style={styles.progress}>
-          Card {currentIndex + 1} / {session.cards.length}
-        </Text>
+        <View style={styles.progressRow}>
+          <Text style={styles.progress}>
+            Card {currentIndex + 1} / {session.cards.length}
+          </Text>
+          <Pressable
+            onPress={onPressSpeaker}
+            disabled={speaking}
+            style={[styles.speakerButton, speaking && styles.speakerButtonDisabled]}>
+            <MaterialIcons name="volume-up" size={24} color="#0f172a" />
+          </Pressable>
+        </View>
 
         <AnimatedFlashcard
           frontText={currentCard.prompt}
@@ -185,7 +214,21 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#334155',
     fontWeight: '700',
-    textAlign: 'center',
+  },
+  progressRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  speakerButton: {
+    borderRadius: 999,
+    backgroundColor: '#ccfbf1',
+    borderWidth: 1,
+    borderColor: '#99f6e4',
+    padding: 8,
+  },
+  speakerButtonDisabled: {
+    opacity: 0.5,
   },
   answerBox: {
     marginTop: 4,
