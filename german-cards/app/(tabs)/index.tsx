@@ -23,6 +23,7 @@ export default function HomeScreen() {
   const router = useRouter();
   const [stats, setStats] = useState<Stats>(defaultStats);
   const [selectedDrillSize, setSelectedDrillSize] = useState<number | null>(null);
+  const [selectedMode, setSelectedMode] = useState<'de-en' | 'en-de'>('de-en');
 
   useFocusEffect(
     useCallback(() => {
@@ -85,9 +86,27 @@ export default function HomeScreen() {
           })}
         </View>
 
+        <Text style={styles.sectionTitle}>Choose Direction</Text>
+        <View style={styles.modeRow}>
+          <Pressable
+            style={[styles.modeButton, selectedMode === 'de-en' && styles.modeButtonActive]}
+            onPress={() => setSelectedMode('de-en')}>
+            <Text style={[styles.modeButtonText, selectedMode === 'de-en' && styles.modeButtonTextActive]}>
+              German to English
+            </Text>
+          </Pressable>
+          <Pressable
+            style={[styles.modeButton, selectedMode === 'en-de' && styles.modeButtonActive]}
+            onPress={() => setSelectedMode('en-de')}>
+            <Text style={[styles.modeButtonText, selectedMode === 'en-de' && styles.modeButtonTextActive]}>
+              English to German
+            </Text>
+          </Pressable>
+        </View>
+
         <Pressable
           style={[styles.primaryButton, !selectedDrillSize && styles.primaryButtonDisabled]}
-          onPress={() => router.push(`/drill?size=${selectedDrillSize ?? 50}`)}
+          onPress={() => router.push(`/drill?size=${selectedDrillSize ?? 50}&mode=${selectedMode}`)}
           disabled={!selectedDrillSize}>
           <Text style={styles.primaryButtonText}>
             {selectedDrillSize ? `Start ${selectedDrillSize}-Word Drill` : 'Select size to start'}
@@ -212,6 +231,30 @@ const styles = StyleSheet.create({
     color: '#334155',
   },
   sizeButtonTextActive: {
+    color: '#115e59',
+  },
+  modeRow: {
+    gap: 10,
+  },
+  modeButton: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    backgroundColor: '#ffffff',
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+  },
+  modeButtonActive: {
+    borderColor: '#0f766e',
+    backgroundColor: '#ccfbf1',
+  },
+  modeButtonText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#334155',
+    textAlign: 'center',
+  },
+  modeButtonTextActive: {
     color: '#115e59',
   },
 });

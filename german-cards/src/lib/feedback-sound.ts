@@ -6,8 +6,7 @@ let configured = false;
 let correctSound: Audio.Sound | null = null;
 let wrongSound: Audio.Sound | null = null;
 
-const CORRECT_SOUND_URI =
-  'https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg';
+const CORRECT_SOUND_URI = 'https://actions.google.com/sounds/v1/alarms/beep_short.ogg';
 const WRONG_SOUND_URI = 'https://actions.google.com/sounds/v1/cartoon/wood_plank_flicks.ogg';
 
 async function configureAudio() {
@@ -62,4 +61,3 @@ export async function unloadFeedbackSounds() {
     wrongSound = null;
   }
 }
-

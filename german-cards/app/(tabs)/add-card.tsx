@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { addCard, ensureDatabaseReady } from '@/src/db/sqlite';
@@ -31,34 +31,42 @@ export default function AddCardScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <View style={styles.container}>
-        <Text style={styles.title}>Add Card</Text>
-        <Text style={styles.subtitle}>Create custom German vocabulary cards.</Text>
+      <KeyboardAvoidingView
+        style={styles.keyboardAvoidingView}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 16 : 0}>
+        <ScrollView
+          contentContainerStyle={styles.container}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}>
+          <Text style={styles.title}>Add Card</Text>
+          <Text style={styles.subtitle}>Create custom German vocabulary cards.</Text>
 
-        <View style={styles.form}>
-          <Text style={styles.label}>German</Text>
-          <TextInput
-            value={german}
-            onChangeText={setGerman}
-            style={styles.input}
-            placeholder="z.B. der Apfel"
-            placeholderTextColor="#94a3b8"
-          />
+          <View style={styles.form}>
+            <Text style={styles.label}>German</Text>
+            <TextInput
+              value={german}
+              onChangeText={setGerman}
+              style={styles.input}
+              placeholder="z.B. der Apfel"
+              placeholderTextColor="#94a3b8"
+            />
 
-          <Text style={styles.label}>English</Text>
-          <TextInput
-            value={english}
-            onChangeText={setEnglish}
-            style={styles.input}
-            placeholder="e.g. the apple"
-            placeholderTextColor="#94a3b8"
-          />
-        </View>
+            <Text style={styles.label}>English</Text>
+            <TextInput
+              value={english}
+              onChangeText={setEnglish}
+              style={styles.input}
+              placeholder="e.g. the apple"
+              placeholderTextColor="#94a3b8"
+            />
+          </View>
 
-        <Pressable style={[styles.button, saving && styles.buttonDisabled]} onPress={onSave} disabled={saving}>
-          <Text style={styles.buttonText}>{saving ? 'Saving...' : 'Save Card'}</Text>
-        </Pressable>
-      </View>
+          <Pressable style={[styles.button, saving && styles.buttonDisabled]} onPress={onSave} disabled={saving}>
+            <Text style={styles.buttonText}>{saving ? 'Saving...' : 'Save Card'}</Text>
+          </Pressable>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -68,10 +76,14 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f4f9fb',
   },
-  container: {
+  keyboardAvoidingView: {
     flex: 1,
+  },
+  container: {
+    flexGrow: 1,
     paddingHorizontal: 22,
     paddingTop: 18,
+    paddingBottom: 28,
   },
   title: {
     fontSize: 32,

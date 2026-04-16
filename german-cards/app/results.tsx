@@ -4,11 +4,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function ResultsScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ right?: string; wrong?: string; wrongIds?: string }>();
+  const params = useLocalSearchParams<{ right?: string; wrong?: string; wrongIds?: string; size?: string; mode?: string }>();
 
   const right = Number(params.right ?? 0);
   const wrong = Number(params.wrong ?? 0);
   const wrongIds = (params.wrongIds ?? '').trim();
+  const size = Number(params.size ?? 50);
+  const safeSize = size === 10 || size === 25 || size === 50 ? size : 50;
+  const mode = params.mode === 'en-de' ? 'en-de' : 'de-en';
 
   const total = right + wrong;
   const score = total > 0 ? Math.round((right / total) * 100) : 0;
@@ -22,14 +25,16 @@ export default function ResultsScreen() {
           Right: {right} | Wrong: {wrong}
         </Text>
 
-        <Pressable style={styles.primaryButton} onPress={() => router.replace('/drill')}>
+        <Pressable style={styles.primaryButton} onPress={() => router.replace(`/drill?size=${safeSize}&mode=${mode}`)}>
           <Text style={styles.primaryButtonText}>Start New Random Drill</Text>
         </Pressable>
 
         <Pressable
           style={[styles.secondaryButton, !wrongIds && styles.disabled]}
           disabled={!wrongIds}
-          onPress={() => router.replace(`/drill?retryIds=${encodeURIComponent(wrongIds)}`)}>
+          onPress={() =>
+            router.replace(`/drill?retryIds=${encodeURIComponent(wrongIds)}&size=${safeSize}&mode=${mode}`)
+          }>
           <Text style={styles.secondaryButtonText}>Retry Wrong Cards</Text>
         </Pressable>
 
@@ -104,4 +109,3 @@ const styles = StyleSheet.create({
     textDecorationLine: 'underline',
   },
 });
-

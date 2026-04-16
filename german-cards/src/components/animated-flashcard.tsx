@@ -2,10 +2,8 @@ import { useCallback, useEffect, useMemo, useRef } from 'react';
 import {
   Animated,
   PanResponder,
-  Pressable,
   StyleSheet,
   Text,
-  View,
   type GestureResponderEvent,
   type PanResponderGestureState,
 } from 'react-native';
@@ -17,6 +15,7 @@ type Props = {
   onToggleReveal: () => void;
   onSwipeLeft: () => void;
   onSwipeRight: () => void;
+  onSwipeProgress?: (dx: number) => void;
 };
 
 const SWIPE_THRESHOLD = 120;
@@ -28,10 +27,12 @@ export function AnimatedFlashcard({
   onToggleReveal,
   onSwipeLeft,
   onSwipeRight,
+  onSwipeProgress,
 }: Props) {
   const panX = useRef(new Animated.Value(0)).current;
   const cardEntrance = useRef(new Animated.Value(0)).current;
   const flip = useRef(new Animated.Value(0)).current;
+  const gestureStart = useRef({ x: 0, y: 0 });
 
   useEffect(() => {
     Animated.spring(cardEntrance, {
@@ -50,12 +51,13 @@ export function AnimatedFlashcard({
   }, [flip, revealed]);
 
   const resetCardPosition = useCallback(() => {
+    onSwipeProgress?.(0);
     Animated.spring(panX, {
       toValue: 0,
       useNativeDriver: true,
       bounciness: 8,
     }).start();
-  }, [panX]);
+  }, [onSwipeProgress, panX]);
 
   const completeSwipe = useCallback((direction: 'left' | 'right') => {
     Animated.timing(panX, {
@@ -64,13 +66,14 @@ export function AnimatedFlashcard({
       useNativeDriver: true,
     }).start(() => {
       panX.setValue(0);
+      onSwipeProgress?.(0);
       if (direction === 'left') {
         onSwipeLeft();
       } else {
         onSwipeRight();
       }
     });
-  }, [onSwipeLeft, onSwipeRight, panX]);
+  }, [onSwipeLeft, onSwipeProgress, onSwipeRight, panX]);
 
   const onRelease = useCallback(
     (_event: GestureResponderEvent, gestureState: PanResponderGestureState) => {
@@ -90,14 +93,30 @@ export function AnimatedFlashcard({
   const responder = useMemo(
     () =>
       PanResponder.create({
-        onMoveShouldSetPanResponder: (_evt, state) => Math.abs(state.dx) > 10,
+        onStartShouldSetPanResponder: () => true,
+        onMoveShouldSetPanResponder: () => true,
+        onPanResponderGrant: (_evt, state) => {
+          gestureStart.current = { x: state.x0, y: state.y0 };
+        },
+        onPanResponderTerminationRequest: () => false,
         onPanResponderMove: (_evt, state) => {
           panX.setValue(state.dx);
+          onSwipeProgress?.(state.dx);
         },
-        onPanResponderRelease: onRelease,
+        onPanResponderRelease: (event, state) => {
+          const moveX = Math.abs(state.moveX - gestureStart.current.x);
+          const moveY = Math.abs(state.moveY - gestureStart.current.y);
+          const isTap = moveX < 8 && moveY < 8 && Math.abs(state.dx) < 8 && Math.abs(state.dy) < 8;
+          if (isTap) {
+            resetCardPosition();
+            onToggleReveal();
+            return;
+          }
+          onRelease(event, state);
+        },
         onPanResponderTerminate: onRelease,
       }),
-    [onRelease, panX]
+    [onRelease, onSwipeProgress, onToggleReveal, panX, resetCardPosition]
   );
 
   const tilt = panX.interpolate({
@@ -122,7 +141,6 @@ export function AnimatedFlashcard({
     inputRange: [0, 0.5, 1],
     outputRange: [0, 0, 1],
   });
-
   return (
     <Animated.View
       style={[
@@ -137,7 +155,7 @@ export function AnimatedFlashcard({
           opacity: cardEntrance,
         },
       ]}>
-      <Pressable style={styles.cardButton} onPress={onToggleReveal} {...responder.panHandlers}>
+      <Animated.View style={styles.cardButton} {...responder.panHandlers}>
         <Animated.View
           style={[
             styles.cardFace,
@@ -159,11 +177,7 @@ export function AnimatedFlashcard({
           <Text style={styles.cardAnswer}>{backText}</Text>
           <Text style={styles.tapHint}>Tap to hide</Text>
         </Animated.View>
-      </Pressable>
-      <View style={styles.swipeHints}>
-        <Text style={styles.know}>Swipe left: I know it</Text>
-        <Text style={styles.dontKnow}>Swipe right: I do not know it</Text>
-      </View>
+      </Animated.View>
     </Animated.View>
   );
 }
@@ -225,21 +239,5 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: 'center',
     color: '#64748b',
-  },
-  swipeHints: {
-    width: '100%',
-    marginTop: 14,
-    gap: 3,
-    alignItems: 'center',
-  },
-  know: {
-    color: '#0f766e',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  dontKnow: {
-    color: '#9f1239',
-    fontSize: 12,
-    fontWeight: '600',
   },
 });

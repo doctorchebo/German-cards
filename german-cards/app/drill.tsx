@@ -1,8 +1,15 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import * as Speech from 'expo-speech';
-import { useEffect, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AnimatedFlashcard } from '@/src/components/animated-flashcard';
@@ -18,10 +25,11 @@ type Feedback = {
 
 export default function DrillScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ retryIds?: string; size?: string }>();
+  const params = useLocalSearchParams<{ retryIds?: string; size?: string; mode?: string }>();
   const retryIdsParam = typeof params.retryIds === 'string' ? params.retryIds : '';
   const sizeParam = typeof params.size === 'string' ? Number(params.size) : NaN;
   const drillSize = sizeParam === 10 || sizeParam === 25 || sizeParam === 50 ? sizeParam : 50;
+  const mode = params.mode === 'en-de' ? 'en-de' : 'de-en';
 
   const [session, setSession] = useState<DrillSession | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -29,10 +37,13 @@ export default function DrillScreen() {
   const [inputAnswer, setInputAnswer] = useState('');
   const [feedback, setFeedback] = useState<Feedback>({ type: null, message: '' });
   const [answeredCurrent, setAnsweredCurrent] = useState(false);
-  const [right, setRight] = useState(0);
-  const [wrong, setWrong] = useState(0);
-  const [wrongCardIds, setWrongCardIds] = useState<number[]>([]);
   const [speaking, setSpeaking] = useState(false);
+  const [swipeDx, setSwipeDx] = useState(0);
+  const resultRef = useRef<{ right: number; wrong: number; wrongCardIds: number[] }>({
+    right: 0,
+    wrong: 0,
+    wrongCardIds: [],
+  });
 
   const retryIds = useMemo(
     () =>
@@ -54,6 +65,13 @@ export default function DrillScreen() {
   useEffect(() => {
     let active = true;
     (async () => {
+      setCurrentIndex(0);
+      setRevealed(false);
+      setInputAnswer('');
+      setFeedback({ type: null, message: '' });
+      setAnsweredCurrent(false);
+      resultRef.current = { right: 0, wrong: 0, wrongCardIds: [] };
+
       const drill = await createDrillSession(retryIds, drillSize);
       if (active) {
         setSession(drill);
@@ -63,43 +81,61 @@ export default function DrillScreen() {
     return () => {
       active = false;
     };
-  }, [drillSize, retryIds, retryIdsParam]);
+  }, [drillSize, retryIds, retryIdsParam, mode]);
 
   const currentCard = session?.cards[currentIndex];
+  const frontText = mode === 'de-en' ? currentCard?.prompt ?? '' : currentCard?.answer ?? '';
+  const backText = mode === 'de-en' ? currentCard?.answer ?? '' : currentCard?.prompt ?? '';
+  const expectedInput = backText;
+  const swipeIndicatorOpacity = Math.min(Math.abs(swipeDx) / 120, 1);
 
   const moveNext = () => {
     if (!session) return;
     if (currentIndex >= session.cards.length - 1) {
+      const wrongIds = Array.from(new Set(resultRef.current.wrongCardIds));
       const query = new URLSearchParams({
-        right: String(right),
-        wrong: String(wrong),
-        wrongIds: wrongCardIds.join(','),
+        right: String(resultRef.current.right),
+        wrong: String(resultRef.current.wrong),
+        wrongIds: wrongIds.join(','),
+        size: String(drillSize),
+        mode,
       }).toString();
       router.replace(`/results?${query}`);
       return;
     }
-    setCurrentIndex((value) => value + 1);
     setRevealed(false);
     setInputAnswer('');
     setFeedback({ type: null, message: '' });
     setAnsweredCurrent(false);
+    setSwipeDx(0);
+    setCurrentIndex((value) => value + 1);
   };
 
   const submitResult = async (isRight: boolean, method: 'input' | 'swipe-left-know' | 'swipe-right-dont-know') => {
     if (!session || !currentCard || answeredCurrent) return;
+    const isSwipe = method !== 'input';
 
     await recordAttempt(session.drillId, currentCard.id, isRight, method, method === 'input' ? inputAnswer : null);
     setAnsweredCurrent(true);
 
     if (isRight) {
-      await playFeedbackSound('right');
-      setRight((count) => count + 1);
-      setFeedback({ type: 'right', message: 'Correct. Nice work.' });
+      resultRef.current.right += 1;
+      if (!isSwipe) {
+        await playFeedbackSound('right');
+        setFeedback({ type: 'right', message: 'Correct. Nice work.' });
+      }
     } else {
-      await playFeedbackSound('wrong');
-      setWrong((count) => count + 1);
-      setWrongCardIds((ids) => [...ids, currentCard.id]);
-      setFeedback({ type: 'wrong', message: `Not quite. Answer: ${currentCard.answer}` });
+      resultRef.current.wrong += 1;
+      resultRef.current.wrongCardIds.push(currentCard.id);
+      if (!isSwipe) {
+        await playFeedbackSound('wrong');
+        setFeedback({ type: 'wrong', message: `Not quite. Answer: ${expectedInput}` });
+      }
+    }
+
+    if (isSwipe) {
+      moveNext();
+      return;
     }
 
     setTimeout(() => {
@@ -109,14 +145,16 @@ export default function DrillScreen() {
 
   const checkInput = async () => {
     if (!currentCard || answeredCurrent) return;
-    const correct = isAnswerCorrect(currentCard.answer, inputAnswer);
+    const correct = isAnswerCorrect(expectedInput, inputAnswer);
     await submitResult(correct, 'input');
   };
 
   const onPressSpeaker = () => {
     if (!currentCard || speaking) return;
-    const visibleText = revealed ? currentCard.answer : currentCard.prompt;
-    const language = revealed ? 'en-US' : 'de-DE';
+    const visibleText = revealed ? backText : frontText;
+    const frontLanguage = mode === 'de-en' ? 'de-DE' : 'en-US';
+    const backLanguage = mode === 'de-en' ? 'en-US' : 'de-DE';
+    const language = revealed ? backLanguage : frontLanguage;
 
     Speech.stop();
     setSpeaking(true);
@@ -142,49 +180,79 @@ export default function DrillScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <View style={styles.container}>
-        <View style={styles.progressRow}>
-          <Text style={styles.progress}>
-            Card {currentIndex + 1} / {session.cards.length}
-          </Text>
-          <Pressable
-            onPress={onPressSpeaker}
-            disabled={speaking}
-            style={[styles.speakerButton, speaking && styles.speakerButtonDisabled]}>
-            <MaterialIcons name="volume-up" size={24} color="#0f172a" />
-          </Pressable>
-        </View>
-
-        <AnimatedFlashcard
-          frontText={currentCard.prompt}
-          backText={currentCard.answer}
-          revealed={revealed}
-          onToggleReveal={() => setRevealed((value) => !value)}
-          onSwipeLeft={() => submitResult(true, 'swipe-left-know')}
-          onSwipeRight={() => submitResult(false, 'swipe-right-dont-know')}
-        />
-
-        <View style={styles.answerBox}>
-          <Text style={styles.inputLabel}>Type translation (optional)</Text>
-          <TextInput
-            value={inputAnswer}
-            onChangeText={setInputAnswer}
-            style={styles.input}
-            placeholder="Type your English translation"
-            placeholderTextColor="#94a3b8"
-            autoCorrect={false}
-          />
-          <Pressable onPress={checkInput} disabled={answeredCurrent} style={styles.checkButton}>
-            <Text style={styles.checkButtonText}>Check Answer</Text>
-          </Pressable>
-        </View>
-
-        {feedback.type ? (
-          <View style={[styles.feedback, feedback.type === 'right' ? styles.feedbackRight : styles.feedbackWrong]}>
-            <Text style={styles.feedbackText}>{feedback.message}</Text>
+      <KeyboardAwareScrollView
+        contentContainerStyle={styles.container}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+        enableOnAndroid
+        extraScrollHeight={30}
+        extraHeight={70}
+        keyboardOpeningTime={0}
+        enableResetScrollToCoords>
+          <View style={styles.progressRow}>
+            <Text style={styles.progress}>
+              Card {currentIndex + 1} / {session.cards.length}
+            </Text>
+            <Pressable
+              onPress={onPressSpeaker}
+              disabled={speaking}
+              style={[styles.speakerButton, speaking && styles.speakerButtonDisabled]}>
+              <MaterialIcons name="volume-up" size={24} color="#0f172a" />
+            </Pressable>
           </View>
-        ) : null}
-      </View>
+
+          <View style={styles.cardStage}>
+            <View
+              pointerEvents="none"
+              style={[
+                styles.swipeScreenOverlay,
+                styles.swipeScreenOverlayLeft,
+                { opacity: swipeDx < 0 ? swipeIndicatorOpacity : 0 },
+              ]}>
+              <Text style={styles.swipeScreenOverlayText}>✓</Text>
+            </View>
+            <View
+              pointerEvents="none"
+              style={[
+                styles.swipeScreenOverlay,
+                styles.swipeScreenOverlayRight,
+                { opacity: swipeDx > 0 ? swipeIndicatorOpacity : 0 },
+              ]}>
+              <Text style={styles.swipeScreenOverlayText}>✕</Text>
+            </View>
+            <AnimatedFlashcard
+              key={currentCard.id}
+              frontText={frontText}
+              backText={backText}
+              revealed={revealed}
+              onToggleReveal={() => setRevealed((value) => !value)}
+              onSwipeLeft={() => submitResult(true, 'swipe-left-know')}
+              onSwipeRight={() => submitResult(false, 'swipe-right-dont-know')}
+              onSwipeProgress={setSwipeDx}
+            />
+          </View>
+
+          <View style={styles.answerBox}>
+            <Text style={styles.inputLabel}>Type translation (optional)</Text>
+            <TextInput
+              value={inputAnswer}
+              onChangeText={setInputAnswer}
+              style={styles.input}
+              placeholder={mode === 'de-en' ? 'Type your English translation' : 'Type your German translation'}
+              placeholderTextColor="#94a3b8"
+              autoCorrect={false}
+            />
+            <Pressable onPress={checkInput} disabled={answeredCurrent} style={styles.checkButton}>
+              <Text style={styles.checkButtonText}>Check Answer</Text>
+            </Pressable>
+          </View>
+
+          {feedback.type ? (
+            <View style={[styles.feedback, feedback.type === 'right' ? styles.feedbackRight : styles.feedbackWrong]}>
+              <Text style={styles.feedbackText}>{feedback.message}</Text>
+            </View>
+          ) : null}
+      </KeyboardAwareScrollView>
     </SafeAreaView>
   );
 }
@@ -195,10 +263,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#ecf7f5',
   },
   container: {
-    flex: 1,
+    flexGrow: 1,
     paddingHorizontal: 18,
     paddingTop: 10,
     gap: 14,
+    paddingBottom: 24,
   },
   loadingWrap: {
     flex: 1,
@@ -219,6 +288,34 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+  },
+  cardStage: {
+    position: 'relative',
+    minHeight: 274,
+    justifyContent: 'center',
+  },
+  swipeScreenOverlay: {
+    position: 'absolute',
+    top: 18,
+    bottom: 18,
+    width: '42%',
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 2,
+  },
+  swipeScreenOverlayLeft: {
+    left: 0,
+    backgroundColor: 'rgba(15, 118, 110, 0.22)',
+  },
+  swipeScreenOverlayRight: {
+    right: 0,
+    backgroundColor: 'rgba(190, 18, 60, 0.22)',
+  },
+  swipeScreenOverlayText: {
+    fontSize: 82,
+    fontWeight: '900',
+    color: '#ffffff',
   },
   speakerButton: {
     borderRadius: 999,

@@ -1,4 +1,16 @@
-import * as SQLite from 'expo-sqlite';
+import { initializeApp, getApps } from 'firebase/app';
+import { getAuth, signInAnonymously } from 'firebase/auth';
+import {
+  get,
+  getDatabase,
+  push,
+  query,
+  ref,
+  runTransaction,
+  set,
+  orderByChild,
+  limitToLast,
+} from 'firebase/database';
 
 import { seedCards } from '@/src/data/seed-cards';
 import { chooseDrillCards } from '@/src/lib/drill';
@@ -11,110 +23,199 @@ type TotalStats = {
   wrongAnswers: number;
 };
 
-const db = SQLite.openDatabaseSync(':memory:');
+type StoredCard = {
+  language: 'de';
+  prompt: string;
+  answer: string;
+  createdAt: number;
+};
+
+type StoredDrill = {
+  startedAt: number;
+  cardIds: number[];
+};
+
+type StoredAttempt = {
+  drillId: number;
+  cardId: number;
+  result: 'right' | 'wrong';
+  answeredWith: string | null;
+  method: 'input' | 'swipe-left-know' | 'swipe-right-dont-know';
+  createdAt: number;
+};
+
+const firebaseConfig = {
+  apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  databaseURL: process.env.EXPO_PUBLIC_FIREBASE_DATABASE_URL,
+  projectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID,
+  appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID,
+};
 
 let isReady = false;
 
-function runMigrations() {
-  db.execSync(`
-    PRAGMA journal_mode = WAL;
-    PRAGMA foreign_keys = ON;
+function assertFirebaseConfig() {
+  const missing = Object.entries(firebaseConfig)
+    .filter(([, value]) => !value)
+    .map(([key]) => key);
 
-    CREATE TABLE IF NOT EXISTS cards (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      language TEXT NOT NULL DEFAULT 'de',
-      prompt TEXT NOT NULL,
-      answer TEXT NOT NULL,
-      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-    );
-
-    CREATE TABLE IF NOT EXISTS drills (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      started_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-    );
-
-    CREATE TABLE IF NOT EXISTS drill_cards (
-      drill_id INTEGER NOT NULL,
-      card_id INTEGER NOT NULL,
-      PRIMARY KEY (drill_id, card_id),
-      FOREIGN KEY (drill_id) REFERENCES drills (id) ON DELETE CASCADE,
-      FOREIGN KEY (card_id) REFERENCES cards (id) ON DELETE CASCADE
-    );
-
-    CREATE TABLE IF NOT EXISTS attempts (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      drill_id INTEGER NOT NULL,
-      card_id INTEGER NOT NULL,
-      result TEXT NOT NULL CHECK(result IN ('right', 'wrong')),
-      answered_with TEXT,
-      method TEXT NOT NULL CHECK(method IN ('input', 'swipe-left-know', 'swipe-right-dont-know')),
-      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (drill_id) REFERENCES drills (id) ON DELETE CASCADE,
-      FOREIGN KEY (card_id) REFERENCES cards (id) ON DELETE CASCADE
-    );
-
-    CREATE TABLE IF NOT EXISTS translation_cache (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      source_text TEXT NOT NULL UNIQUE,
-      translated_text TEXT NOT NULL,
-      source_lang TEXT NOT NULL DEFAULT 'de',
-      target_lang TEXT NOT NULL DEFAULT 'en',
-      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-    );
-  `);
+  if (missing.length > 0) {
+    throw new Error(`Missing Firebase config: ${missing.join(', ')}.`);
+  }
 }
 
-function seedDefaultCardsIfEmpty() {
-  const existing = db.getFirstSync<{ count: number }>('SELECT COUNT(*) as count FROM cards');
-  if ((existing?.count ?? 0) > 0) return;
-
-  for (const card of seedCards) {
-    db.runSync('INSERT INTO cards (language, prompt, answer) VALUES (?, ?, ?)', [
-      card.language,
-      card.prompt,
-      card.answer,
-    ]);
+function getFirebaseApp() {
+  assertFirebaseConfig();
+  if (getApps().length > 0) {
+    return getApps()[0];
   }
+
+  return initializeApp({
+    apiKey: firebaseConfig.apiKey,
+    authDomain: firebaseConfig.authDomain,
+    databaseURL: firebaseConfig.databaseURL,
+    projectId: firebaseConfig.projectId,
+    appId: firebaseConfig.appId,
+  });
+}
+
+function sanitizeKey(input: string) {
+  return input.trim().toLowerCase().replace(/[.#$\/[\]]/g, '_');
+}
+
+function makeCardKey(language: string, prompt: string, answer: string) {
+  return `${sanitizeKey(language)}__${sanitizeKey(prompt)}__${sanitizeKey(answer)}`;
+}
+
+function makeTranslationKey(sourceText: string) {
+  return sanitizeKey(sourceText);
+}
+
+async function syncSeedCards() {
+  const app = getFirebaseApp();
+  const db = getDatabase(app);
+  const cardsRef = ref(db, 'cardsByKey');
+  const snapshot = await get(cardsRef);
+  const existing = snapshot.exists() ? (snapshot.val() as Record<string, StoredCard>) : {};
+
+  const updates = seedCards.reduce<Record<string, StoredCard>>((acc, card) => {
+    const key = makeCardKey(card.language, card.prompt, card.answer);
+    if (!existing[key]) {
+      acc[key] = {
+        language: card.language,
+        prompt: card.prompt,
+        answer: card.answer,
+        createdAt: Date.now(),
+      };
+    }
+    return acc;
+  }, {});
+
+  const updateEntries = Object.entries(updates);
+  if (updateEntries.length === 0) return;
+
+  await Promise.all(updateEntries.map(([key, card]) => set(ref(db, `cardsByKey/${key}`), card)));
 }
 
 export async function ensureDatabaseReady() {
   if (isReady) return;
-  runMigrations();
-  seedDefaultCardsIfEmpty();
+  const app = getFirebaseApp();
+  const auth = getAuth(app);
+
+  if (!auth.currentUser) {
+    try {
+      await signInAnonymously(auth);
+    } catch {
+      // If anonymous auth is disabled, reads can still work with less strict rules.
+    }
+  }
+
+  await syncSeedCards();
   isReady = true;
+}
+
+async function loadSortedCards(): Promise<Card[]> {
+  const app = getFirebaseApp();
+  const db = getDatabase(app);
+  const snapshot = await get(ref(db, 'cardsByKey'));
+  if (!snapshot.exists()) return [];
+
+  const entries = Object.values(snapshot.val() as Record<string, StoredCard>);
+  entries.sort((a, b) => a.prompt.localeCompare(b.prompt, 'de', { sensitivity: 'base' }));
+
+  return entries.map((entry, index) => ({
+    id: index + 1,
+    language: entry.language,
+    prompt: entry.prompt,
+    answer: entry.answer,
+  }));
 }
 
 export async function getAllCards(): Promise<Card[]> {
   await ensureDatabaseReady();
-  return db.getAllSync<Card>('SELECT id, language, prompt, answer FROM cards ORDER BY prompt COLLATE NOCASE');
+  return loadSortedCards();
 }
 
 export async function addCard(prompt: string, answer: string): Promise<void> {
   await ensureDatabaseReady();
-  db.runSync('INSERT INTO cards (language, prompt, answer) VALUES (?, ?, ?)', ['de', prompt.trim(), answer.trim()]);
+  const app = getFirebaseApp();
+  const db = getDatabase(app);
+
+  const cleanPrompt = prompt.trim();
+  const cleanAnswer = answer.trim();
+  if (!cleanPrompt || !cleanAnswer) return;
+
+  const key = makeCardKey('de', cleanPrompt, cleanAnswer);
+  await set(ref(db, `cardsByKey/${key}`), {
+    language: 'de',
+    prompt: cleanPrompt,
+    answer: cleanAnswer,
+    createdAt: Date.now(),
+  } as StoredCard);
 }
 
-function getLastDrillCardIds(): number[] {
-  const latest = db.getFirstSync<{ id: number }>('SELECT id FROM drills ORDER BY id DESC LIMIT 1');
-  if (!latest) return [];
-  const rows = db.getAllSync<{ card_id: number }>('SELECT card_id FROM drill_cards WHERE drill_id = ?', [
-    latest.id,
-  ]);
-  return rows.map((row) => row.card_id);
+async function getLastDrillCardIds(): Promise<number[]> {
+  const app = getFirebaseApp();
+  const db = getDatabase(app);
+  const snapshot = await get(query(ref(db, 'drills'), orderByChild('startedAt'), limitToLast(1)));
+
+  if (!snapshot.exists()) return [];
+  const latest = Object.values(snapshot.val() as Record<string, StoredDrill>)[0];
+  return Array.isArray(latest.cardIds) ? latest.cardIds : [];
+}
+
+async function getNextDrillId(): Promise<number> {
+  const app = getFirebaseApp();
+  const db = getDatabase(app);
+  const counterRef = ref(db, 'meta/nextDrillId');
+  const result = await runTransaction(counterRef, (current) => {
+    if (typeof current === 'number' && Number.isFinite(current)) return current + 1;
+    return 1;
+  });
+
+  if (!result.committed || typeof result.snapshot.val() !== 'number') {
+    throw new Error('Failed to generate drill id.');
+  }
+
+  return result.snapshot.val() as number;
 }
 
 export async function createDrillSession(forcedCardIds: number[] = [], size = 50): Promise<DrillSession> {
   await ensureDatabaseReady();
-  const cards = await getAllCards();
-  const lastDrillCardIds = forcedCardIds.length > 0 ? [] : getLastDrillCardIds();
+  const app = getFirebaseApp();
+  const db = getDatabase(app);
+
+  const cards = await loadSortedCards();
+  const lastDrillCardIds = forcedCardIds.length > 0 ? [] : await getLastDrillCardIds();
   const chosen = chooseDrillCards(cards, size, lastDrillCardIds, forcedCardIds);
 
-  const insert = db.runSync('INSERT INTO drills DEFAULT VALUES');
-  const drillId = insert.lastInsertRowId as number;
+  const drillId = await getNextDrillId();
+  const drillPayload: StoredDrill = {
+    startedAt: Date.now(),
+    cardIds: chosen.map((card) => card.id),
+  };
 
-  for (const card of chosen) {
-    db.runSync('INSERT INTO drill_cards (drill_id, card_id) VALUES (?, ?)', [drillId, card.id]);
-  }
+  await set(ref(db, `drills/${drillId}`), drillPayload);
 
   return {
     drillId,
@@ -130,48 +231,80 @@ export async function recordAttempt(
   answeredWith: string | null = null
 ) {
   await ensureDatabaseReady();
-  db.runSync('INSERT INTO attempts (drill_id, card_id, result, answered_with, method) VALUES (?, ?, ?, ?, ?)', [
+  const app = getFirebaseApp();
+  const db = getDatabase(app);
+
+  const payload: StoredAttempt = {
     drillId,
     cardId,
-    isRight ? 'right' : 'wrong',
+    result: isRight ? 'right' : 'wrong',
     answeredWith,
     method,
-  ]);
+    createdAt: Date.now(),
+  };
+
+  await set(push(ref(db, 'attempts')), payload);
 }
 
 export async function getTotalStats(): Promise<TotalStats> {
   await ensureDatabaseReady();
+  const app = getFirebaseApp();
+  const db = getDatabase(app);
 
-  const cards = db.getFirstSync<{ count: number }>('SELECT COUNT(*) as count FROM cards');
-  const drills = db.getFirstSync<{ count: number }>('SELECT COUNT(*) as count FROM drills');
-  const right = db.getFirstSync<{ count: number }>("SELECT COUNT(*) as count FROM attempts WHERE result = 'right'");
-  const wrong = db.getFirstSync<{ count: number }>("SELECT COUNT(*) as count FROM attempts WHERE result = 'wrong'");
+  const [cardsSnapshot, drillsSnapshot, attemptsSnapshot] = await Promise.all([
+    get(ref(db, 'cardsByKey')),
+    get(ref(db, 'drills')),
+    get(ref(db, 'attempts')),
+  ]);
+
+  const cardCount = cardsSnapshot.exists() ? Object.keys(cardsSnapshot.val() as Record<string, StoredCard>).length : 0;
+  const drillsCompleted = drillsSnapshot.exists()
+    ? Object.keys(drillsSnapshot.val() as Record<string, StoredDrill>).length
+    : 0;
+
+  let rightAnswers = 0;
+  let wrongAnswers = 0;
+
+  if (attemptsSnapshot.exists()) {
+    const attempts = Object.values(attemptsSnapshot.val() as Record<string, StoredAttempt>);
+    for (const attempt of attempts) {
+      if (attempt.result === 'right') rightAnswers += 1;
+      if (attempt.result === 'wrong') wrongAnswers += 1;
+    }
+  }
 
   return {
-    cardCount: cards?.count ?? 0,
-    drillsCompleted: drills?.count ?? 0,
-    rightAnswers: right?.count ?? 0,
-    wrongAnswers: wrong?.count ?? 0,
+    cardCount,
+    drillsCompleted,
+    rightAnswers,
+    wrongAnswers,
   };
 }
 
 export async function getCachedTranslation(sourceText: string): Promise<string | null> {
   await ensureDatabaseReady();
-  const row = db.getFirstSync<{ translated_text: string }>(
-    'SELECT translated_text FROM translation_cache WHERE source_text = ? LIMIT 1',
-    [sourceText.trim()]
-  );
-  return row?.translated_text ?? null;
+  const app = getFirebaseApp();
+  const db = getDatabase(app);
+
+  const key = makeTranslationKey(sourceText);
+  const snapshot = await get(ref(db, `translation_cache/${key}`));
+  if (!snapshot.exists()) return null;
+
+  const value = snapshot.val() as { translatedText?: string };
+  return value.translatedText ?? null;
 }
 
 export async function saveCachedTranslation(sourceText: string, translatedText: string): Promise<void> {
   await ensureDatabaseReady();
-  db.runSync(
-    `
-      INSERT INTO translation_cache (source_text, translated_text)
-      VALUES (?, ?)
-      ON CONFLICT(source_text) DO UPDATE SET translated_text = excluded.translated_text
-    `,
-    [sourceText.trim(), translatedText.trim()]
-  );
+  const app = getFirebaseApp();
+  const db = getDatabase(app);
+
+  const key = makeTranslationKey(sourceText);
+  await set(ref(db, `translation_cache/${key}`), {
+    sourceText: sourceText.trim(),
+    translatedText: translatedText.trim(),
+    sourceLang: 'de',
+    targetLang: 'en',
+    createdAt: Date.now(),
+  });
 }

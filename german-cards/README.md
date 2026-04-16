@@ -17,7 +17,7 @@ This app uses Expo public env variables at runtime:
 - `EXPO_PUBLIC_GC_GOOGLE_CLIENT_SECRET`
 - `EXPO_PUBLIC_GC_GOOGLE_API_KEY` (optional fallback, recommended)
 
-`.env` is configured to map from your local machine variables:
+For local development, create `.env.local` (git-ignored), for example:
 
 ```dotenv
 EXPO_PUBLIC_GC_GOOGLE_CLIENT_ID=${GC_GOOGLE_CLIENT_ID}
