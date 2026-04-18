@@ -3,17 +3,23 @@
     "version": ">= 16.21.0"
   },
   "build": {
+    "base": {
+      "android": {
+        "image": "latest"
+      }
+    },
     "preview": {
+      "extends": "base",
       "distribution": "internal",
       "android": {
         "buildType": "apk"
       }
     },
     "production": {
+      "extends": "base",
       "android": {
         "buildType": "app-bundle"
       }
     }
   }
 }
-
