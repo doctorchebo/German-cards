@@ -1,0 +1,6 @@
+android/.gradle/**
+android/.gradle/
+android/build/
+android/app/build/
+android/**/build/
+android/**/.gradle/
