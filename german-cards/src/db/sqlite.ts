@@ -1,17 +1,6 @@
-import { initializeApp, getApps } from 'firebase/app';
-import { getAuth, signInAnonymously } from 'firebase/auth';
-import {
-  get,
-  getDatabase,
-  push,
-  query,
-  ref,
-  runTransaction,
-  set,
-  orderByChild,
-  limitToLast,
-} from 'firebase/database';
+import { get, getDatabase, push, ref, runTransaction, set } from 'firebase/database';
 
+import { getCurrentUser, getFirebaseApp, waitForAuthReady } from '@/src/lib/firebase-auth';
 import { seedCards } from '@/src/data/seed-cards';
 import { chooseDrillCards } from '@/src/lib/drill';
 import type { Card, DrillSession } from '@/src/types/card';
@@ -44,40 +33,7 @@ type StoredAttempt = {
   createdAt: number;
 };
 
-const firebaseConfig = {
-  apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
-  authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN,
-  databaseURL: process.env.EXPO_PUBLIC_FIREBASE_DATABASE_URL,
-  projectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID,
-  appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID,
-};
-
 let isReady = false;
-
-function assertFirebaseConfig() {
-  const missing = Object.entries(firebaseConfig)
-    .filter(([, value]) => !value)
-    .map(([key]) => key);
-
-  if (missing.length > 0) {
-    throw new Error(`Missing Firebase config: ${missing.join(', ')}.`);
-  }
-}
-
-function getFirebaseApp() {
-  assertFirebaseConfig();
-  if (getApps().length > 0) {
-    return getApps()[0];
-  }
-
-  return initializeApp({
-    apiKey: firebaseConfig.apiKey,
-    authDomain: firebaseConfig.authDomain,
-    databaseURL: firebaseConfig.databaseURL,
-    projectId: firebaseConfig.projectId,
-    appId: firebaseConfig.appId,
-  });
-}
 
 function sanitizeKey(input: string) {
   return input.trim().toLowerCase().replace(/[.#$\/[\]]/g, '_');
@@ -119,15 +75,11 @@ async function syncSeedCards() {
 
 export async function ensureDatabaseReady() {
   if (isReady) return;
-  const app = getFirebaseApp();
-  const auth = getAuth(app);
 
-  if (!auth.currentUser) {
-    try {
-      await signInAnonymously(auth);
-    } catch {
-      // If anonymous auth is disabled, reads can still work with less strict rules.
-    }
+  await waitForAuthReady();
+
+  if (!getCurrentUser()) {
+    throw new Error('Authentication required. Please sign in with Google.');
   }
 
   await syncSeedCards();
@@ -135,6 +87,7 @@ export async function ensureDatabaseReady() {
 }
 
 async function loadSortedCards(): Promise<Card[]> {
+  await ensureDatabaseReady();
   const app = getFirebaseApp();
   const db = getDatabase(app);
   const snapshot = await get(ref(db, 'cardsByKey'));
@@ -177,11 +130,21 @@ export async function addCard(prompt: string, answer: string): Promise<void> {
 async function getLastDrillCardIds(): Promise<number[]> {
   const app = getFirebaseApp();
   const db = getDatabase(app);
-  const snapshot = await get(query(ref(db, 'drills'), orderByChild('startedAt'), limitToLast(1)));
+  const snapshot = await get(ref(db, 'drills'));
 
   if (!snapshot.exists()) return [];
-  const latest = Object.values(snapshot.val() as Record<string, StoredDrill>)[0];
-  return Array.isArray(latest.cardIds) ? latest.cardIds : [];
+
+  const drills = Object.values(snapshot.val() as Record<string, StoredDrill>);
+  if (drills.length === 0) return [];
+
+  let latest: StoredDrill | null = null;
+  for (const drill of drills) {
+    if (!latest || drill.startedAt > latest.startedAt) {
+      latest = drill;
+    }
+  }
+
+  return latest && Array.isArray(latest.cardIds) ? latest.cardIds : [];
 }
 
 async function getNextDrillId(): Promise<number> {

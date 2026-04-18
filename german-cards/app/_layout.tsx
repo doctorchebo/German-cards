@@ -4,6 +4,7 @@ import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { AuthGate } from '@/src/components/auth-gate';
 
 export const unstable_settings = {
   anchor: '(tabs)',
@@ -15,10 +16,12 @@ export default function RootLayout() {
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <Stack>
+        <Stack.Screen name="sign-in" options={{ headerShown: false }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="drill" options={{ title: 'Drill', headerBackTitle: 'Home' }} />
         <Stack.Screen name="results" options={{ title: 'Results', headerBackVisible: false }} />
       </Stack>
+      <AuthGate />
       <StatusBar style="auto" />
     </ThemeProvider>
   );

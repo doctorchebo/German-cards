@@ -41,10 +41,4 @@ app-example
 
 # generated native folders
 /ios
-
-# Android build artifacts (android/ source is tracked)
-android/.gradle/
-android/build/
-android/app/build/
-android/app/release/
-android/local.properties
+/android

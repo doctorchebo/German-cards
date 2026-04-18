@@ -3,6 +3,7 @@ import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import * as Speech from 'expo-speech';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Keyboard,
   Pressable,
   StyleSheet,
   Text,
@@ -145,6 +146,7 @@ export default function DrillScreen() {
 
   const checkInput = async () => {
     if (!currentCard || answeredCurrent) return;
+    Keyboard.dismiss();
     const correct = isAnswerCorrect(expectedInput, inputAnswer);
     await submitResult(correct, 'input');
   };
@@ -185,8 +187,8 @@ export default function DrillScreen() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
         enableOnAndroid
-        extraScrollHeight={30}
-        extraHeight={70}
+        extraScrollHeight={70}
+        extraHeight={90}
         keyboardOpeningTime={0}
         enableResetScrollToCoords>
           <View style={styles.progressRow}>

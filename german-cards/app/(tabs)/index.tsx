@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ensureDatabaseReady, getTotalStats } from '@/src/db/sqlite';
+import { signOutFirebase } from '@/src/lib/firebase-auth';
 
 type Stats = {
   cardCount: number;
@@ -42,8 +43,15 @@ export default function HomeScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
-        <Text style={styles.title}>German Cards</Text>
-        <Text style={styles.subtitle}>Train your vocabulary with short drills.</Text>
+        <View style={styles.headerRow}>
+          <View style={styles.headerTextWrap}>
+            <Text style={styles.title}>German Cards</Text>
+            <Text style={styles.subtitle}>Train your vocabulary with short drills.</Text>
+          </View>
+          <Pressable style={styles.signOutButton} onPress={signOutFirebase}>
+            <Text style={styles.signOutText}>Sign out</Text>
+          </Pressable>
+        </View>
 
         <View style={styles.languageCard}>
           <Text style={styles.languageLabel}>Language</Text>
@@ -128,6 +136,15 @@ const styles = StyleSheet.create({
     paddingTop: 18,
     gap: 16,
   },
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: 10,
+  },
+  headerTextWrap: {
+    flex: 1,
+  },
   title: {
     fontSize: 36,
     fontWeight: '800',
@@ -136,6 +153,20 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 16,
     color: '#475569',
+  },
+  signOutButton: {
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    backgroundColor: '#ffffff',
+  },
+  signOutText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#334155',
   },
   languageCard: {
     marginTop: 8,
