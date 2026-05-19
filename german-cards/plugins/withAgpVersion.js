@@ -13,13 +13,15 @@ const withAgpVersion = (config) =>
     async (cfg) => {
       const libsPath = path.join(
         cfg.modRequest.projectRoot,
-        "node_modules/react-native/gradle/libs.versions.toml"
+        "node_modules/react-native/gradle/libs.versions.toml",
       );
       if (fs.existsSync(libsPath)) {
         let contents = fs.readFileSync(libsPath, "utf8");
         contents = contents.replace(/agp = "8\.11\.\d+"/, 'agp = "8.5.2"');
         fs.writeFileSync(libsPath, contents);
-        console.log("[withAgpVersion] Patched AGP to 8.5.2 in libs.versions.toml");
+        console.log(
+          "[withAgpVersion] Patched AGP to 8.5.2 in libs.versions.toml",
+        );
       }
       return cfg;
     },

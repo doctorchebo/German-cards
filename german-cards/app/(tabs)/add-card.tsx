@@ -1,19 +1,29 @@
-import { useState } from 'react';
-import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useState } from "react";
+import {
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
-import { addCard, ensureDatabaseReady } from '@/src/db/sqlite';
+import { addCard, ensureDatabaseReady } from "@/src/db/firebase-db";
 
 export default function AddCardScreen() {
-  const [german, setGerman] = useState('');
-  const [english, setEnglish] = useState('');
+  const [german, setGerman] = useState("");
+  const [english, setEnglish] = useState("");
   const [saving, setSaving] = useState(false);
 
   const onSave = async () => {
     const cleanGerman = german.trim();
     const cleanEnglish = english.trim();
     if (!cleanGerman || !cleanEnglish) {
-      Alert.alert('Missing fields', 'Please add both German and English text.');
+      Alert.alert("Missing fields", "Please add both German and English text.");
       return;
     }
 
@@ -21,9 +31,9 @@ export default function AddCardScreen() {
     try {
       await ensureDatabaseReady();
       await addCard(cleanGerman, cleanEnglish);
-      setGerman('');
-      setEnglish('');
-      Alert.alert('Saved', 'Your new card is ready for the next drill.');
+      setGerman("");
+      setEnglish("");
+      Alert.alert("Saved", "Your new card is ready for the next drill.");
     } finally {
       setSaving(false);
     }
@@ -33,14 +43,18 @@ export default function AddCardScreen() {
     <SafeAreaView style={styles.safeArea}>
       <KeyboardAvoidingView
         style={styles.keyboardAvoidingView}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 16 : 0}>
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 16 : 0}
+      >
         <ScrollView
           contentContainerStyle={styles.container}
           keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}>
+          showsVerticalScrollIndicator={false}
+        >
           <Text style={styles.title}>Add Card</Text>
-          <Text style={styles.subtitle}>Create custom German vocabulary cards.</Text>
+          <Text style={styles.subtitle}>
+            Create custom German vocabulary cards.
+          </Text>
 
           <View style={styles.form}>
             <Text style={styles.label}>German</Text>
@@ -62,8 +76,14 @@ export default function AddCardScreen() {
             />
           </View>
 
-          <Pressable style={[styles.button, saving && styles.buttonDisabled]} onPress={onSave} disabled={saving}>
-            <Text style={styles.buttonText}>{saving ? 'Saving...' : 'Save Card'}</Text>
+          <Pressable
+            style={[styles.button, saving && styles.buttonDisabled]}
+            onPress={onSave}
+            disabled={saving}
+          >
+            <Text style={styles.buttonText}>
+              {saving ? "Saving..." : "Save Card"}
+            </Text>
           </Pressable>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -74,7 +94,7 @@ export default function AddCardScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#f4f9fb',
+    backgroundColor: "#f4f9fb",
   },
   keyboardAvoidingView: {
     flex: 1,
@@ -87,13 +107,13 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 32,
-    fontWeight: '800',
-    color: '#0f172a',
+    fontWeight: "800",
+    color: "#0f172a",
   },
   subtitle: {
     marginTop: 6,
     fontSize: 16,
-    color: '#475569',
+    color: "#475569",
   },
   form: {
     marginTop: 22,
@@ -101,34 +121,33 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 14,
-    color: '#334155',
-    fontWeight: '700',
+    color: "#334155",
+    fontWeight: "700",
   },
   input: {
-    backgroundColor: '#ffffff',
+    backgroundColor: "#ffffff",
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#d7e1ea',
+    borderColor: "#d7e1ea",
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 16,
     marginBottom: 12,
-    color: '#0f172a',
+    color: "#0f172a",
   },
   button: {
     marginTop: 14,
     borderRadius: 12,
-    backgroundColor: '#0f766e',
+    backgroundColor: "#0f766e",
     paddingVertical: 14,
-    alignItems: 'center',
+    alignItems: "center",
   },
   buttonDisabled: {
     opacity: 0.7,
   },
   buttonText: {
-    color: '#f8fafc',
+    color: "#f8fafc",
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: "700",
   },
 });
-

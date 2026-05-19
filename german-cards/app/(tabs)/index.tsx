@@ -1,10 +1,10 @@
-import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect, useRouter } from "expo-router";
+import { useCallback, useState } from "react";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
-import { ensureDatabaseReady, getTotalStats } from '@/src/db/sqlite';
-import { signOutFirebase } from '@/src/lib/firebase-auth';
+import { ensureDatabaseReady, getTotalStats } from "@/src/db/firebase-db";
+import { signOutFirebase } from "@/src/lib/firebase-auth";
 
 type Stats = {
   cardCount: number;
@@ -23,8 +23,10 @@ const defaultStats: Stats = {
 export default function HomeScreen() {
   const router = useRouter();
   const [stats, setStats] = useState<Stats>(defaultStats);
-  const [selectedDrillSize, setSelectedDrillSize] = useState<number | null>(null);
-  const [selectedMode, setSelectedMode] = useState<'de-en' | 'en-de'>('de-en');
+  const [selectedDrillSize, setSelectedDrillSize] = useState<number | null>(
+    null,
+  );
+  const [selectedMode, setSelectedMode] = useState<"de-en" | "en-de">("de-en");
 
   useFocusEffect(
     useCallback(() => {
@@ -37,7 +39,7 @@ export default function HomeScreen() {
       return () => {
         active = false;
       };
-    }, [])
+    }, []),
   );
 
   return (
@@ -46,7 +48,9 @@ export default function HomeScreen() {
         <View style={styles.headerRow}>
           <View style={styles.headerTextWrap}>
             <Text style={styles.title}>German Cards</Text>
-            <Text style={styles.subtitle}>Train your vocabulary with short drills.</Text>
+            <Text style={styles.subtitle}>
+              Train your vocabulary with short drills.
+            </Text>
           </View>
           <Pressable style={styles.signOutButton} onPress={signOutFirebase}>
             <Text style={styles.signOutText}>Sign out</Text>
@@ -56,7 +60,9 @@ export default function HomeScreen() {
         <View style={styles.languageCard}>
           <Text style={styles.languageLabel}>Language</Text>
           <Text style={styles.languageValue}>German (default)</Text>
-          <Text style={styles.languageHint}>More languages can be added later.</Text>
+          <Text style={styles.languageHint}>
+            More languages can be added later.
+          </Text>
         </View>
 
         <View style={styles.statsRow}>
@@ -87,8 +93,16 @@ export default function HomeScreen() {
               <Pressable
                 key={size}
                 style={[styles.sizeButton, active && styles.sizeButtonActive]}
-                onPress={() => setSelectedDrillSize(size)}>
-                <Text style={[styles.sizeButtonText, active && styles.sizeButtonTextActive]}>{size}</Text>
+                onPress={() => setSelectedDrillSize(size)}
+              >
+                <Text
+                  style={[
+                    styles.sizeButtonText,
+                    active && styles.sizeButtonTextActive,
+                  ]}
+                >
+                  {size}
+                </Text>
               </Pressable>
             );
           })}
@@ -97,27 +111,55 @@ export default function HomeScreen() {
         <Text style={styles.sectionTitle}>Choose Direction</Text>
         <View style={styles.modeRow}>
           <Pressable
-            style={[styles.modeButton, selectedMode === 'de-en' && styles.modeButtonActive]}
-            onPress={() => setSelectedMode('de-en')}>
-            <Text style={[styles.modeButtonText, selectedMode === 'de-en' && styles.modeButtonTextActive]}>
+            style={[
+              styles.modeButton,
+              selectedMode === "de-en" && styles.modeButtonActive,
+            ]}
+            onPress={() => setSelectedMode("de-en")}
+          >
+            <Text
+              style={[
+                styles.modeButtonText,
+                selectedMode === "de-en" && styles.modeButtonTextActive,
+              ]}
+            >
               German to English
             </Text>
           </Pressable>
           <Pressable
-            style={[styles.modeButton, selectedMode === 'en-de' && styles.modeButtonActive]}
-            onPress={() => setSelectedMode('en-de')}>
-            <Text style={[styles.modeButtonText, selectedMode === 'en-de' && styles.modeButtonTextActive]}>
+            style={[
+              styles.modeButton,
+              selectedMode === "en-de" && styles.modeButtonActive,
+            ]}
+            onPress={() => setSelectedMode("en-de")}
+          >
+            <Text
+              style={[
+                styles.modeButtonText,
+                selectedMode === "en-de" && styles.modeButtonTextActive,
+              ]}
+            >
               English to German
             </Text>
           </Pressable>
         </View>
 
         <Pressable
-          style={[styles.primaryButton, !selectedDrillSize && styles.primaryButtonDisabled]}
-          onPress={() => router.push(`/drill?size=${selectedDrillSize ?? 50}&mode=${selectedMode}`)}
-          disabled={!selectedDrillSize}>
+          style={[
+            styles.primaryButton,
+            !selectedDrillSize && styles.primaryButtonDisabled,
+          ]}
+          onPress={() =>
+            router.push(
+              `/drill?size=${selectedDrillSize ?? 50}&mode=${selectedMode}`,
+            )
+          }
+          disabled={!selectedDrillSize}
+        >
           <Text style={styles.primaryButtonText}>
-            {selectedDrillSize ? `Start ${selectedDrillSize}-Word Drill` : 'Select size to start'}
+            {selectedDrillSize
+              ? `Start ${selectedDrillSize}-Word Drill`
+              : "Select size to start"}
           </Text>
         </Pressable>
       </View>
@@ -128,7 +170,7 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#f4f9fb',
+    backgroundColor: "#f4f9fb",
   },
   container: {
     flex: 1,
@@ -137,9 +179,9 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   headerRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
     gap: 10,
   },
   headerTextWrap: {
@@ -147,100 +189,100 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 36,
-    fontWeight: '800',
-    color: '#0f172a',
+    fontWeight: "800",
+    color: "#0f172a",
   },
   subtitle: {
     fontSize: 16,
-    color: '#475569',
+    color: "#475569",
   },
   signOutButton: {
     marginTop: 8,
     borderWidth: 1,
-    borderColor: '#cbd5e1',
+    borderColor: "#cbd5e1",
     borderRadius: 10,
     paddingHorizontal: 10,
     paddingVertical: 8,
-    backgroundColor: '#ffffff',
+    backgroundColor: "#ffffff",
   },
   signOutText: {
     fontSize: 13,
-    fontWeight: '700',
-    color: '#334155',
+    fontWeight: "700",
+    color: "#334155",
   },
   languageCard: {
     marginTop: 8,
     borderRadius: 18,
     padding: 16,
-    backgroundColor: '#ffffff',
+    backgroundColor: "#ffffff",
     borderWidth: 1,
-    borderColor: '#d8e4ef',
+    borderColor: "#d8e4ef",
   },
   languageLabel: {
     fontSize: 12,
-    color: '#64748b',
-    textTransform: 'uppercase',
-    fontWeight: '700',
+    color: "#64748b",
+    textTransform: "uppercase",
+    fontWeight: "700",
     letterSpacing: 0.7,
   },
   languageValue: {
     marginTop: 8,
     fontSize: 20,
-    color: '#0f172a',
-    fontWeight: '700',
+    color: "#0f172a",
+    fontWeight: "700",
   },
   languageHint: {
     marginTop: 4,
     fontSize: 13,
-    color: '#64748b',
+    color: "#64748b",
   },
   statsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexDirection: "row",
+    flexWrap: "wrap",
     gap: 10,
   },
   statCard: {
-    width: '48%',
-    backgroundColor: '#ffffff',
+    width: "48%",
+    backgroundColor: "#ffffff",
     borderWidth: 1,
-    borderColor: '#d8e4ef',
+    borderColor: "#d8e4ef",
     borderRadius: 14,
     padding: 14,
   },
   statLabel: {
     fontSize: 12,
-    color: '#64748b',
-    textTransform: 'uppercase',
-    fontWeight: '700',
+    color: "#64748b",
+    textTransform: "uppercase",
+    fontWeight: "700",
   },
   statValue: {
     marginTop: 6,
     fontSize: 24,
-    color: '#0f172a',
-    fontWeight: '800',
+    color: "#0f172a",
+    fontWeight: "800",
   },
   primaryButton: {
     marginTop: 6,
-    backgroundColor: '#0f766e',
+    backgroundColor: "#0f766e",
     paddingVertical: 16,
     borderRadius: 14,
-    alignItems: 'center',
+    alignItems: "center",
   },
   primaryButtonDisabled: {
     opacity: 0.5,
   },
   primaryButtonText: {
-    color: '#f8fafc',
-    fontWeight: '700',
+    color: "#f8fafc",
+    fontWeight: "700",
     fontSize: 16,
   },
   sectionTitle: {
-    color: '#0f172a',
-    fontWeight: '700',
+    color: "#0f172a",
+    fontWeight: "700",
     fontSize: 16,
   },
   sizeRow: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 10,
   },
   sizeButton: {
@@ -248,21 +290,21 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#cbd5e1',
-    backgroundColor: '#ffffff',
-    alignItems: 'center',
+    borderColor: "#cbd5e1",
+    backgroundColor: "#ffffff",
+    alignItems: "center",
   },
   sizeButtonActive: {
-    borderColor: '#0f766e',
-    backgroundColor: '#ccfbf1',
+    borderColor: "#0f766e",
+    backgroundColor: "#ccfbf1",
   },
   sizeButtonText: {
     fontSize: 16,
-    fontWeight: '700',
-    color: '#334155',
+    fontWeight: "700",
+    color: "#334155",
   },
   sizeButtonTextActive: {
-    color: '#115e59',
+    color: "#115e59",
   },
   modeRow: {
     gap: 10,
@@ -270,22 +312,22 @@ const styles = StyleSheet.create({
   modeButton: {
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#cbd5e1',
-    backgroundColor: '#ffffff',
+    borderColor: "#cbd5e1",
+    backgroundColor: "#ffffff",
     paddingVertical: 12,
     paddingHorizontal: 14,
   },
   modeButtonActive: {
-    borderColor: '#0f766e',
-    backgroundColor: '#ccfbf1',
+    borderColor: "#0f766e",
+    backgroundColor: "#ccfbf1",
   },
   modeButtonText: {
     fontSize: 15,
-    fontWeight: '700',
-    color: '#334155',
-    textAlign: 'center',
+    fontWeight: "700",
+    color: "#334155",
+    textAlign: "center",
   },
   modeButtonTextActive: {
-    color: '#115e59',
+    color: "#115e59",
   },
 });

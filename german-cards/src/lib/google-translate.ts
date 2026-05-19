@@ -1,4 +1,7 @@
-import { getCachedTranslation, saveCachedTranslation } from '@/src/db/sqlite';
+import {
+  getCachedTranslation,
+  saveCachedTranslation,
+} from "@/src/db/firebase-db";
 
 type TokenResponse = {
   access_token: string;
@@ -10,20 +13,22 @@ async function fetchAccessToken() {
   const clientId = process.env.EXPO_PUBLIC_GC_GOOGLE_CLIENT_ID;
   const clientSecret = process.env.EXPO_PUBLIC_GC_GOOGLE_CLIENT_SECRET;
   if (!clientId || !clientSecret) {
-    throw new Error('Missing EXPO_PUBLIC_GC_GOOGLE_CLIENT_ID or EXPO_PUBLIC_GC_GOOGLE_CLIENT_SECRET.');
+    throw new Error(
+      "Missing EXPO_PUBLIC_GC_GOOGLE_CLIENT_ID or EXPO_PUBLIC_GC_GOOGLE_CLIENT_SECRET.",
+    );
   }
 
   const body = new URLSearchParams({
     client_id: clientId,
     client_secret: clientSecret,
-    grant_type: 'client_credentials',
-    scope: 'https://www.googleapis.com/auth/cloud-platform',
+    grant_type: "client_credentials",
+    scope: "https://www.googleapis.com/auth/cloud-platform",
   }).toString();
 
-  const response = await fetch('https://oauth2.googleapis.com/token', {
-    method: 'POST',
+  const response = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
     headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
+      "Content-Type": "application/x-www-form-urlencoded",
     },
     body,
   });
@@ -41,23 +46,26 @@ async function fetchTranslationWithApiKey(sourceText: string): Promise<string> {
   const apiKey =
     process.env.EXPO_PUBLIC_GC_GOOGLE_API_KEY ??
     process.env.EXPO_PUBLIC_GC_GOOGLE_CLIENT_SECRET ??
-    '';
+    "";
   if (!apiKey) {
-    throw new Error('Missing Google API key.');
+    throw new Error("Missing Google API key.");
   }
 
-  const response = await fetch(`https://translation.googleapis.com/language/translate/v2?key=${apiKey}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
+  const response = await fetch(
+    `https://translation.googleapis.com/language/translate/v2?key=${apiKey}`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        q: sourceText,
+        source: "de",
+        target: "en",
+        format: "text",
+      }),
     },
-    body: JSON.stringify({
-      q: sourceText,
-      source: 'de',
-      target: 'en',
-      format: 'text',
-    }),
-  });
+  );
 
   if (!response.ok) {
     const text = await response.text();
@@ -72,7 +80,7 @@ async function fetchTranslationWithApiKey(sourceText: string): Promise<string> {
 
   const translated = payload.data?.translations?.[0]?.translatedText?.trim();
   if (!translated) {
-    throw new Error('API-key translation returned an empty result.');
+    throw new Error("API-key translation returned an empty result.");
   }
 
   return translated;
@@ -81,19 +89,22 @@ async function fetchTranslationWithApiKey(sourceText: string): Promise<string> {
 async function fetchTranslationFromGoogle(sourceText: string): Promise<string> {
   try {
     const token = await fetchAccessToken();
-    const response = await fetch('https://translation.googleapis.com/language/translate/v2', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
+    const response = await fetch(
+      "https://translation.googleapis.com/language/translate/v2",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          q: sourceText,
+          source: "de",
+          target: "en",
+          format: "text",
+        }),
       },
-      body: JSON.stringify({
-        q: sourceText,
-        source: 'de',
-        target: 'en',
-        format: 'text',
-      }),
-    });
+    );
 
     if (!response.ok) {
       const text = await response.text();
@@ -108,7 +119,7 @@ async function fetchTranslationFromGoogle(sourceText: string): Promise<string> {
 
     const translated = payload.data?.translations?.[0]?.translatedText?.trim();
     if (!translated) {
-      throw new Error('OAuth translation returned an empty result.');
+      throw new Error("OAuth translation returned an empty result.");
     }
 
     return translated;
@@ -117,9 +128,11 @@ async function fetchTranslationFromGoogle(sourceText: string): Promise<string> {
   }
 }
 
-export async function translateGermanToEnglish(sourceText: string): Promise<string> {
+export async function translateGermanToEnglish(
+  sourceText: string,
+): Promise<string> {
   const key = sourceText.trim();
-  if (!key) return '';
+  if (!key) return "";
 
   const cached = await getCachedTranslation(key);
   if (cached) return cached;
