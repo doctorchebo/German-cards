@@ -4,6 +4,8 @@
   "version": "1.0.0",
   "scripts": {
     "start": "expo start",
+    "start:mobile": "expo start --tunnel",
+    "start:mobile:fresh": "powershell -ExecutionPolicy Bypass -File ./scripts/start-mobile-fresh.ps1",
     "reset-project": "node ./scripts/reset-project.js",
     "android": "expo run:android",
     "ios": "expo run:ios",

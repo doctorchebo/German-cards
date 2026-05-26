@@ -9,6 +9,23 @@ npm install
 npx expo start
 ```
 
+## Reliable mobile refresh (Expo Go)
+
+If Expo Go shows stale code on phone while web has the newest code, use:
+
+```bash
+npm run start:mobile:fresh
+```
+
+This script:
+- stops running `expo start` node processes
+- clears `.expo`, `.expo-shared`, and Metro cache in `node_modules/.cache/metro`
+- starts Expo with `--tunnel --clear`
+
+If your device still shows stale content, clear Expo Go app storage once:
+- Android: Settings -> Apps -> Expo Go -> Storage -> Clear cache (and Clear storage if needed)
+- iOS: uninstall and reinstall Expo Go
+
 ## Environment variables
 
 This app uses Expo public env variables at runtime:

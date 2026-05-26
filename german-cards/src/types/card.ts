@@ -2,6 +2,7 @@ export type LanguageCode = 'de';
 
 export type Card = {
   id: number;
+  key?: string;
   language: LanguageCode;
   prompt: string;
   answer: string;
@@ -9,6 +10,7 @@ export type Card = {
 
 export type DrillCard = {
   id: number;
+  key: string;
   prompt: string;
   answer: string;
 };
@@ -23,4 +25,3 @@ export type DrillResult = {
   wrong: number;
   wrongCardIds: number[];
 };
-

@@ -1,6 +1,6 @@
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { ensureDatabaseReady, getTotalStats } from "@/src/db/firebase-db";
@@ -44,7 +44,10 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <View style={styles.container}>
+      <ScrollView
+        contentContainerStyle={styles.container}
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.headerRow}>
           <View style={styles.headerTextWrap}>
             <Text style={styles.title}>German Cards</Text>
@@ -162,7 +165,33 @@ export default function HomeScreen() {
               : "Select size to start"}
           </Text>
         </Pressable>
-      </View>
+
+        <Text style={styles.sectionTitle}>Special Practice</Text>
+        <Pressable
+          style={styles.secondaryButton}
+          onPress={() => router.push("/mcq-drill?type=prepositions" as never)}
+        >
+          <Text style={styles.secondaryButtonText}>
+            Practice German Prepositions
+          </Text>
+        </Pressable>
+        <Pressable
+          style={styles.secondaryButton}
+          onPress={() => router.push("/mcq-drill?type=conjugations" as never)}
+        >
+          <Text style={styles.secondaryButtonText}>
+            Practice Useful Verbs + Conjugations
+          </Text>
+        </Pressable>
+        <Pressable
+          style={styles.secondaryButton}
+          onPress={() => router.push("/mcq-drill?type=articles" as never)}
+        >
+          <Text style={styles.secondaryButtonText}>
+            Practice Articles + Cases (Nom/Akk/Dat/Gen)
+          </Text>
+        </Pressable>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -173,9 +202,10 @@ const styles = StyleSheet.create({
     backgroundColor: "#f4f9fb",
   },
   container: {
-    flex: 1,
+    flexGrow: 1,
     paddingHorizontal: 22,
     paddingTop: 18,
+    paddingBottom: 24,
     gap: 16,
   },
   headerRow: {
@@ -329,5 +359,18 @@ const styles = StyleSheet.create({
   },
   modeButtonTextActive: {
     color: "#115e59",
+  },
+  secondaryButton: {
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  secondaryButtonText: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#334155",
   },
 });

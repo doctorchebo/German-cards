@@ -1,5 +1,6 @@
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
+import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -9,6 +10,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -18,6 +20,7 @@ export default function SignInScreen() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -75,18 +78,34 @@ export default function SignInScreen() {
             editable={!loading}
           />
 
-          <TextInput
-            style={styles.input}
-            placeholder="Password"
-            placeholderTextColor="#94a3b8"
-            secureTextEntry
-            textContentType="password"
-            value={password}
-            onChangeText={setPassword}
-            editable={!loading}
-            onSubmitEditing={onSignIn}
-            returnKeyType="go"
-          />
+          <View style={styles.passwordRow}>
+            <TextInput
+              style={styles.passwordInput}
+              placeholder="Password"
+              placeholderTextColor="#94a3b8"
+              secureTextEntry={!showPassword}
+              textContentType="password"
+              autoCorrect={false}
+              autoCapitalize="none"
+              autoComplete="current-password"
+              value={password}
+              onChangeText={setPassword}
+              editable={!loading}
+              onSubmitEditing={onSignIn}
+              returnKeyType="go"
+            />
+            <Pressable
+              onPress={() => setShowPassword((prev) => !prev)}
+              disabled={loading}
+              style={styles.togglePasswordButton}
+            >
+              <MaterialIcons
+                name={showPassword ? "visibility-off" : "visibility"}
+                size={22}
+                color="#0f766e"
+              />
+            </Pressable>
+          </View>
 
           <Pressable
             style={[styles.button, loading && styles.buttonDisabled]}
@@ -141,6 +160,27 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     fontSize: 16,
     color: "#0f172a",
+  },
+  passwordRow: {
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+    borderRadius: 12,
+    paddingLeft: 16,
+    paddingRight: 10,
+    minHeight: 52,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  passwordInput: {
+    flex: 1,
+    paddingVertical: 14,
+    fontSize: 16,
+    color: "#0f172a",
+  },
+  togglePasswordButton: {
+    paddingHorizontal: 10,
+    paddingVertical: 8,
   },
   button: {
     marginTop: 6,

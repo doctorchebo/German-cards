@@ -26,6 +26,13 @@ export default function TabLayout() {
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="plus.circle.fill" color={color} />,
         }}
       />
+      <Tabs.Screen
+        name="flagged"
+        options={{
+          title: 'Flagged',
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="flag.fill" color={color} />,
+        }}
+      />
     </Tabs>
   );
 }

@@ -33,6 +33,13 @@ type StoredAttempt = {
   createdAt: number;
 };
 
+type FlaggedCard = {
+  cardKey: string;
+  prompt: string;
+  answer: string;
+  flaggedAt: number;
+};
+
 let isReady = false;
 
 function sanitizeKey(input: string) {
@@ -93,11 +100,12 @@ async function loadSortedCards(): Promise<Card[]> {
   const snapshot = await get(ref(db, 'cardsByKey'));
   if (!snapshot.exists()) return [];
 
-  const entries = Object.values(snapshot.val() as Record<string, StoredCard>);
-  entries.sort((a, b) => a.prompt.localeCompare(b.prompt, 'de', { sensitivity: 'base' }));
+  const entries = Object.entries(snapshot.val() as Record<string, StoredCard>);
+  entries.sort((a, b) => a[1].prompt.localeCompare(b[1].prompt, 'de', { sensitivity: 'base' }));
 
-  return entries.map((entry, index) => ({
+  return entries.map(([key, entry], index) => ({
     id: index + 1,
+    key,
     language: entry.language,
     prompt: entry.prompt,
     answer: entry.answer,
@@ -182,7 +190,12 @@ export async function createDrillSession(forcedCardIds: number[] = [], size = 50
 
   return {
     drillId,
-    cards: chosen.map((card) => ({ id: card.id, prompt: card.prompt, answer: card.answer })),
+    cards: chosen.map((card) => ({
+      id: card.id,
+      key: card.key ?? makeCardKey(card.language, card.prompt, card.answer),
+      prompt: card.prompt,
+      answer: card.answer,
+    })),
   };
 }
 
@@ -270,4 +283,102 @@ export async function saveCachedTranslation(sourceText: string, translatedText: 
     targetLang: 'en',
     createdAt: Date.now(),
   });
+}
+
+export async function updateCardByKey(cardKey: string, prompt: string, answer: string): Promise<void> {
+  await ensureDatabaseReady();
+  const app = getFirebaseApp();
+  const db = getDatabase(app);
+
+  const cleanPrompt = prompt.trim();
+  const cleanAnswer = answer.trim();
+  if (!cleanPrompt || !cleanAnswer || !cardKey.trim()) return;
+
+  const oldRef = ref(db, `cardsByKey/${cardKey}`);
+  const oldSnapshot = await get(oldRef);
+  if (!oldSnapshot.exists()) return;
+
+  const oldCard = oldSnapshot.val() as StoredCard;
+  const newKey = makeCardKey('de', cleanPrompt, cleanAnswer);
+  const nextCard: StoredCard = {
+    language: 'de',
+    prompt: cleanPrompt,
+    answer: cleanAnswer,
+    createdAt: oldCard.createdAt ?? Date.now(),
+  };
+
+  await set(ref(db, `cardsByKey/${newKey}`), nextCard);
+  if (newKey !== cardKey) {
+    await set(oldRef, null);
+    const flaggedRef = ref(db, `flaggedCardsByKey/${cardKey}`);
+    const flaggedSnapshot = await get(flaggedRef);
+    if (flaggedSnapshot.exists()) {
+      await set(ref(db, `flaggedCardsByKey/${newKey}`), {
+        cardKey: newKey,
+        prompt: cleanPrompt,
+        answer: cleanAnswer,
+        flaggedAt: Date.now(),
+      } as FlaggedCard);
+      await set(flaggedRef, null);
+    }
+  } else {
+    const flaggedRef = ref(db, `flaggedCardsByKey/${cardKey}`);
+    const flaggedSnapshot = await get(flaggedRef);
+    if (flaggedSnapshot.exists()) {
+      await set(flaggedRef, {
+        cardKey,
+        prompt: cleanPrompt,
+        answer: cleanAnswer,
+        flaggedAt: Date.now(),
+      } as FlaggedCard);
+    }
+  }
+}
+
+export async function setCardFlag(cardKey: string, prompt: string, answer: string, flagged: boolean): Promise<void> {
+  await ensureDatabaseReady();
+  const app = getFirebaseApp();
+  const db = getDatabase(app);
+  const targetRef = ref(db, `flaggedCardsByKey/${cardKey}`);
+
+  if (!flagged) {
+    await set(targetRef, null);
+    return;
+  }
+
+  await set(targetRef, {
+    cardKey,
+    prompt: prompt.trim(),
+    answer: answer.trim(),
+    flaggedAt: Date.now(),
+  } as FlaggedCard);
+}
+
+export async function getFlaggedCardKeys(): Promise<Set<string>> {
+  await ensureDatabaseReady();
+  const app = getFirebaseApp();
+  const db = getDatabase(app);
+  const snapshot = await get(ref(db, 'flaggedCardsByKey'));
+  if (!snapshot.exists()) return new Set<string>();
+
+  return new Set(Object.keys(snapshot.val() as Record<string, FlaggedCard>));
+}
+
+export async function getFlaggedCards(): Promise<Card[]> {
+  await ensureDatabaseReady();
+  const app = getFirebaseApp();
+  const db = getDatabase(app);
+  const snapshot = await get(ref(db, 'flaggedCardsByKey'));
+  if (!snapshot.exists()) return [];
+
+  const entries = Object.entries(snapshot.val() as Record<string, FlaggedCard>);
+  entries.sort((a, b) => (b[1].flaggedAt ?? 0) - (a[1].flaggedAt ?? 0));
+
+  return entries.map(([key, entry], index) => ({
+    id: index + 1,
+    key,
+    language: 'de',
+    prompt: entry.prompt,
+    answer: entry.answer,
+  }));
 }

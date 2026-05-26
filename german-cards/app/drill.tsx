@@ -3,7 +3,9 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import * as Speech from "expo-speech";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  Alert,
   Keyboard,
+  Modal,
   Pressable,
   StyleSheet,
   Text,
@@ -14,7 +16,13 @@ import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AnimatedFlashcard } from "@/src/components/animated-flashcard";
-import { createDrillSession, recordAttempt } from "@/src/db/firebase-db";
+import {
+  createDrillSession,
+  getFlaggedCardKeys,
+  recordAttempt,
+  setCardFlag,
+  updateCardByKey,
+} from "@/src/db/firebase-db";
 import {
   playFeedbackSound,
   preloadFeedbackSounds,
@@ -53,6 +61,11 @@ export default function DrillScreen() {
   const [answeredCurrent, setAnsweredCurrent] = useState(false);
   const [speaking, setSpeaking] = useState(false);
   const [swipeDx, setSwipeDx] = useState(0);
+  const [flaggedKeys, setFlaggedKeys] = useState<Set<string>>(new Set());
+  const [editOpen, setEditOpen] = useState(false);
+  const [editPrompt, setEditPrompt] = useState("");
+  const [editAnswer, setEditAnswer] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
   const resultRef = useRef<{
     right: number;
     wrong: number;
@@ -91,8 +104,10 @@ export default function DrillScreen() {
       resultRef.current = { right: 0, wrong: 0, wrongCardIds: [] };
 
       const drill = await createDrillSession(retryIds, drillSize);
+      const flags = await getFlaggedCardKeys();
       if (active) {
         setSession(drill);
+        setFlaggedKeys(flags);
       }
     })();
 
@@ -112,6 +127,7 @@ export default function DrillScreen() {
       : (currentCard?.prompt ?? "");
   const expectedInput = backText;
   const swipeIndicatorOpacity = Math.min(Math.abs(swipeDx) / 120, 1);
+  const isCurrentFlagged = currentCard ? flaggedKeys.has(currentCard.key) : false;
 
   const moveNext = () => {
     if (!session) return;
@@ -205,6 +221,57 @@ export default function DrillScreen() {
     });
   };
 
+  const onToggleFlag = async () => {
+    if (!currentCard) return;
+    const nextFlagState = !isCurrentFlagged;
+    await setCardFlag(
+      currentCard.key,
+      currentCard.prompt,
+      currentCard.answer,
+      nextFlagState,
+    );
+    setFlaggedKeys((prev) => {
+      const next = new Set(prev);
+      if (nextFlagState) next.add(currentCard.key);
+      else next.delete(currentCard.key);
+      return next;
+    });
+  };
+
+  const onOpenEdit = () => {
+    if (!currentCard) return;
+    setEditPrompt(currentCard.prompt);
+    setEditAnswer(currentCard.answer);
+    setEditOpen(true);
+  };
+
+  const onSaveEdit = async () => {
+    if (!currentCard) return;
+    const cleanPrompt = editPrompt.trim();
+    const cleanAnswer = editAnswer.trim();
+    if (!cleanPrompt || !cleanAnswer) {
+      Alert.alert("Missing fields", "Both sides of the card are required.");
+      return;
+    }
+
+    setSavingEdit(true);
+    try {
+      await updateCardByKey(currentCard.key, cleanPrompt, cleanAnswer);
+      setSession((prev) => {
+        if (!prev) return prev;
+        const cards = prev.cards.map((card) =>
+          card.id === currentCard.id
+            ? { ...card, prompt: cleanPrompt, answer: cleanAnswer }
+            : card,
+        );
+        return { ...prev, cards };
+      });
+      setEditOpen(false);
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
   if (!session || !currentCard) {
     return (
       <SafeAreaView style={styles.safeArea}>
@@ -244,6 +311,16 @@ export default function DrillScreen() {
         </View>
 
         <View style={styles.cardStage}>
+          <View style={styles.cardTopRightActions}>
+            <Pressable style={styles.cardActionButton} onPress={onOpenEdit}>
+              <Text style={styles.cardActionText}>Edit</Text>
+            </Pressable>
+            <Pressable style={styles.cardActionButton} onPress={onToggleFlag}>
+              <Text style={styles.cardActionText}>
+                {isCurrentFlagged ? "Unflag" : "Flag"}
+              </Text>
+            </Pressable>
+          </View>
           <View
             pointerEvents="none"
             style={[
@@ -312,6 +389,45 @@ export default function DrillScreen() {
           </View>
         ) : null}
       </KeyboardAwareScrollView>
+      <Modal visible={editOpen} transparent animationType="fade">
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Edit Card</Text>
+            <TextInput
+              style={styles.modalInput}
+              value={editPrompt}
+              onChangeText={setEditPrompt}
+              placeholder="German"
+              placeholderTextColor="#94a3b8"
+            />
+            <TextInput
+              style={styles.modalInput}
+              value={editAnswer}
+              onChangeText={setEditAnswer}
+              placeholder="English"
+              placeholderTextColor="#94a3b8"
+            />
+            <View style={styles.modalActions}>
+              <Pressable
+                style={styles.modalCancelButton}
+                onPress={() => setEditOpen(false)}
+                disabled={savingEdit}
+              >
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                style={styles.modalSaveButton}
+                onPress={onSaveEdit}
+                disabled={savingEdit}
+              >
+                <Text style={styles.modalSaveText}>
+                  {savingEdit ? "Saving..." : "Save"}
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -352,6 +468,27 @@ const styles = StyleSheet.create({
     position: "relative",
     minHeight: 274,
     justifyContent: "center",
+  },
+  cardTopRightActions: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    zIndex: 4,
+    flexDirection: "row",
+    gap: 8,
+  },
+  cardActionButton: {
+    borderWidth: 1,
+    borderColor: "#bfe3dc",
+    backgroundColor: "#ffffff",
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  cardActionText: {
+    color: "#115e59",
+    fontWeight: "700",
+    fontSize: 12,
   },
   swipeScreenOverlay: {
     position: "absolute",
@@ -433,5 +570,58 @@ const styles = StyleSheet.create({
   feedbackText: {
     fontWeight: "700",
     color: "#1e293b",
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(15, 23, 42, 0.45)",
+    justifyContent: "center",
+    paddingHorizontal: 22,
+  },
+  modalCard: {
+    backgroundColor: "#ffffff",
+    borderRadius: 14,
+    padding: 16,
+    gap: 10,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#0f172a",
+  },
+  modalInput: {
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    color: "#0f172a",
+    backgroundColor: "#f8fbfd",
+  },
+  modalActions: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: 10,
+    marginTop: 4,
+  },
+  modalCancelButton: {
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+  },
+  modalCancelText: {
+    color: "#334155",
+    fontWeight: "700",
+  },
+  modalSaveButton: {
+    backgroundColor: "#0f766e",
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+  },
+  modalSaveText: {
+    color: "#f8fafc",
+    fontWeight: "700",
   },
 });
