@@ -16,7 +16,7 @@ export type DrillCard = {
 };
 
 export type DrillSession = {
-  drillId: number;
+  drillId: string;
   cards: DrillCard[];
 };
 

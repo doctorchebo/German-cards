@@ -66,6 +66,7 @@ export default function DrillScreen() {
   const [editPrompt, setEditPrompt] = useState("");
   const [editAnswer, setEditAnswer] = useState("");
   const [savingEdit, setSavingEdit] = useState(false);
+  const [loadingError, setLoadingError] = useState("");
   const resultRef = useRef<{
     right: number;
     wrong: number;
@@ -101,13 +102,22 @@ export default function DrillScreen() {
       setInputAnswer("");
       setFeedback({ type: null, message: "" });
       setAnsweredCurrent(false);
+      setLoadingError("");
       resultRef.current = { right: 0, wrong: 0, wrongCardIds: [] };
 
-      const drill = await createDrillSession(retryIds, drillSize);
-      const flags = await getFlaggedCardKeys();
-      if (active) {
-        setSession(drill);
-        setFlaggedKeys(flags);
+      try {
+        const [drill, flags] = await Promise.all([
+          createDrillSession(retryIds, drillSize),
+          getFlaggedCardKeys(),
+        ]);
+        if (active) {
+          setSession(drill);
+          setFlaggedKeys(flags);
+        }
+      } catch (error) {
+        if (active) {
+          setLoadingError(error instanceof Error ? error.message : "Failed to prepare drill.");
+        }
       }
     })();
 
@@ -276,7 +286,9 @@ export default function DrillScreen() {
     return (
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.loadingWrap}>
-          <Text style={styles.loadingText}>Preparing your drill...</Text>
+          <Text style={styles.loadingText}>
+            {loadingError ? loadingError : "Preparing your drill..."}
+          </Text>
         </View>
       </SafeAreaView>
     );

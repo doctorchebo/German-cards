@@ -1,4 +1,4 @@
-import { get, getDatabase, push, ref, runTransaction, set } from 'firebase/database';
+import { get, getDatabase, push, ref, set, update } from 'firebase/database';
 
 import { getCurrentUser, getFirebaseApp, waitForAuthReady } from '@/src/lib/firebase-auth';
 import { seedCards } from '@/src/data/seed-cards';
@@ -25,7 +25,7 @@ type StoredDrill = {
 };
 
 type StoredAttempt = {
-  drillId: number;
+  drillId: string;
   cardId: number;
   result: 'right' | 'wrong';
   answeredWith: string | null;
@@ -41,6 +41,8 @@ type FlaggedCard = {
 };
 
 let isReady = false;
+let readyPromise: Promise<void> | null = null;
+let sortedCardsCache: Card[] | null = null;
 
 function sanitizeKey(input: string) {
   return input.trim().toLowerCase().replace(/[.#$\/[\]]/g, '_');
@@ -52,6 +54,23 @@ function makeCardKey(language: string, prompt: string, answer: string) {
 
 function makeTranslationKey(sourceText: string) {
   return sanitizeKey(sourceText);
+}
+
+function mapStoredCardsToSortedCards(cardsByKey: Record<string, StoredCard>): Card[] {
+  const entries = Object.entries(cardsByKey);
+  entries.sort((a, b) => a[1].prompt.localeCompare(b[1].prompt, 'de', { sensitivity: 'base' }));
+
+  return entries.map(([key, entry], index) => ({
+    id: index + 1,
+    key,
+    language: entry.language,
+    prompt: entry.prompt,
+    answer: entry.answer,
+  }));
+}
+
+function cacheSortedCards(cardsByKey: Record<string, StoredCard>) {
+  sortedCardsCache = mapStoredCardsToSortedCards(cardsByKey);
 }
 
 async function syncSeedCards() {
@@ -75,41 +94,48 @@ async function syncSeedCards() {
   }, {});
 
   const updateEntries = Object.entries(updates);
-  if (updateEntries.length === 0) return;
+  if (updateEntries.length === 0) {
+    cacheSortedCards(existing);
+    return;
+  }
 
-  await Promise.all(updateEntries.map(([key, card]) => set(ref(db, `cardsByKey/${key}`), card)));
+  await update(cardsRef, updates);
+  cacheSortedCards({ ...existing, ...updates });
 }
 
 export async function ensureDatabaseReady() {
   if (isReady) return;
+  if (readyPromise) return readyPromise;
 
-  await waitForAuthReady();
+  readyPromise = (async () => {
+    await waitForAuthReady();
 
-  if (!getCurrentUser()) {
-    throw new Error('Authentication required. Please sign in with Google.');
+    if (!getCurrentUser()) {
+      throw new Error('Authentication required. Please sign in with Google.');
+    }
+
+    await syncSeedCards();
+    isReady = true;
+  })();
+
+  try {
+    await readyPromise;
+  } finally {
+    readyPromise = null;
   }
-
-  await syncSeedCards();
-  isReady = true;
 }
 
 async function loadSortedCards(): Promise<Card[]> {
   await ensureDatabaseReady();
+  if (sortedCardsCache) return sortedCardsCache;
+
   const app = getFirebaseApp();
   const db = getDatabase(app);
   const snapshot = await get(ref(db, 'cardsByKey'));
   if (!snapshot.exists()) return [];
 
-  const entries = Object.entries(snapshot.val() as Record<string, StoredCard>);
-  entries.sort((a, b) => a[1].prompt.localeCompare(b[1].prompt, 'de', { sensitivity: 'base' }));
-
-  return entries.map(([key, entry], index) => ({
-    id: index + 1,
-    key,
-    language: entry.language,
-    prompt: entry.prompt,
-    answer: entry.answer,
-  }));
+  cacheSortedCards(snapshot.val() as Record<string, StoredCard>);
+  return sortedCardsCache ?? [];
 }
 
 export async function getAllCards(): Promise<Card[]> {
@@ -133,42 +159,18 @@ export async function addCard(prompt: string, answer: string): Promise<void> {
     answer: cleanAnswer,
     createdAt: Date.now(),
   } as StoredCard);
+  sortedCardsCache = null;
 }
 
 async function getLastDrillCardIds(): Promise<number[]> {
   const app = getFirebaseApp();
   const db = getDatabase(app);
-  const snapshot = await get(ref(db, 'drills'));
+  const snapshot = await get(ref(db, 'meta/lastDrillCardIds'));
 
   if (!snapshot.exists()) return [];
 
-  const drills = Object.values(snapshot.val() as Record<string, StoredDrill>);
-  if (drills.length === 0) return [];
-
-  let latest: StoredDrill | null = null;
-  for (const drill of drills) {
-    if (!latest || drill.startedAt > latest.startedAt) {
-      latest = drill;
-    }
-  }
-
-  return latest && Array.isArray(latest.cardIds) ? latest.cardIds : [];
-}
-
-async function getNextDrillId(): Promise<number> {
-  const app = getFirebaseApp();
-  const db = getDatabase(app);
-  const counterRef = ref(db, 'meta/nextDrillId');
-  const result = await runTransaction(counterRef, (current) => {
-    if (typeof current === 'number' && Number.isFinite(current)) return current + 1;
-    return 1;
-  });
-
-  if (!result.committed || typeof result.snapshot.val() !== 'number') {
-    throw new Error('Failed to generate drill id.');
-  }
-
-  return result.snapshot.val() as number;
+  const cardIds = snapshot.val();
+  return Array.isArray(cardIds) ? cardIds.filter((id) => typeof id === 'number') : [];
 }
 
 export async function createDrillSession(forcedCardIds: number[] = [], size = 50): Promise<DrillSession> {
@@ -176,20 +178,29 @@ export async function createDrillSession(forcedCardIds: number[] = [], size = 50
   const app = getFirebaseApp();
   const db = getDatabase(app);
 
-  const cards = await loadSortedCards();
-  const lastDrillCardIds = forcedCardIds.length > 0 ? [] : await getLastDrillCardIds();
+  const [cards, lastDrillCardIds] = await Promise.all([
+    loadSortedCards(),
+    forcedCardIds.length > 0 ? Promise.resolve([]) : getLastDrillCardIds(),
+  ]);
   const chosen = chooseDrillCards(cards, size, lastDrillCardIds, forcedCardIds);
 
-  const drillId = await getNextDrillId();
+  const drillRef = push(ref(db, 'drills'));
+  if (!drillRef.key) {
+    throw new Error('Failed to generate drill id.');
+  }
+
   const drillPayload: StoredDrill = {
     startedAt: Date.now(),
     cardIds: chosen.map((card) => card.id),
   };
 
-  await set(ref(db, `drills/${drillId}`), drillPayload);
+  await update(ref(db), {
+    [`drills/${drillRef.key}`]: drillPayload,
+    'meta/lastDrillCardIds': drillPayload.cardIds,
+  });
 
   return {
-    drillId,
+    drillId: drillRef.key,
     cards: chosen.map((card) => ({
       id: card.id,
       key: card.key ?? makeCardKey(card.language, card.prompt, card.answer),
@@ -200,7 +211,7 @@ export async function createDrillSession(forcedCardIds: number[] = [], size = 50
 }
 
 export async function recordAttempt(
-  drillId: number,
+  drillId: string,
   cardId: number,
   isRight: boolean,
   method: 'input' | 'swipe-left-know' | 'swipe-right-dont-know',
@@ -333,6 +344,7 @@ export async function updateCardByKey(cardKey: string, prompt: string, answer: s
       } as FlaggedCard);
     }
   }
+  sortedCardsCache = null;
 }
 
 export async function setCardFlag(cardKey: string, prompt: string, answer: string, flagged: boolean): Promise<void> {

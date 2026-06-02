@@ -1,12 +1,13 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import {
   Animated,
-  PanResponder,
+  ScrollView,
   StyleSheet,
   Text,
-  type GestureResponderEvent,
-  type PanResponderGestureState,
 } from 'react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+
+import { getSwipeDirection } from '@/src/lib/swipe';
 
 type Props = {
   frontText: string;
@@ -17,8 +18,6 @@ type Props = {
   onSwipeRight: () => void;
   onSwipeProgress?: (dx: number) => void;
 };
-
-const SWIPE_THRESHOLD = 120;
 
 export function AnimatedFlashcard({
   frontText,
@@ -32,7 +31,6 @@ export function AnimatedFlashcard({
   const panX = useRef(new Animated.Value(0)).current;
   const cardEntrance = useRef(new Animated.Value(0)).current;
   const flip = useRef(new Animated.Value(0)).current;
-  const gestureStart = useRef({ x: 0, y: 0 });
 
   useEffect(() => {
     Animated.spring(cardEntrance, {
@@ -75,49 +73,32 @@ export function AnimatedFlashcard({
     });
   }, [onSwipeLeft, onSwipeProgress, onSwipeRight, panX]);
 
-  const onRelease = useCallback(
-    (_event: GestureResponderEvent, gestureState: PanResponderGestureState) => {
-      if (gestureState.dx <= -SWIPE_THRESHOLD) {
-        completeSwipe('left');
-        return;
-      }
-      if (gestureState.dx >= SWIPE_THRESHOLD) {
-        completeSwipe('right');
+  const panGesture = Gesture.Pan()
+    .activeOffsetX([-12, 12])
+    .failOffsetY([-24, 24])
+    .runOnJS(true)
+    .onUpdate((event) => {
+      panX.setValue(event.translationX);
+      onSwipeProgress?.(event.translationX);
+    })
+    .onEnd((event) => {
+      const direction = getSwipeDirection(event.translationX);
+      if (direction) {
+        completeSwipe(direction);
         return;
       }
       resetCardPosition();
-    },
-    [completeSwipe, resetCardPosition]
-  );
+    });
 
-  const responder = useMemo(
-    () =>
-      PanResponder.create({
-        onStartShouldSetPanResponder: () => true,
-        onMoveShouldSetPanResponder: () => true,
-        onPanResponderGrant: (_evt, state) => {
-          gestureStart.current = { x: state.x0, y: state.y0 };
-        },
-        onPanResponderTerminationRequest: () => false,
-        onPanResponderMove: (_evt, state) => {
-          panX.setValue(state.dx);
-          onSwipeProgress?.(state.dx);
-        },
-        onPanResponderRelease: (event, state) => {
-          const moveX = Math.abs(state.moveX - gestureStart.current.x);
-          const moveY = Math.abs(state.moveY - gestureStart.current.y);
-          const isTap = moveX < 8 && moveY < 8 && Math.abs(state.dx) < 8 && Math.abs(state.dy) < 8;
-          if (isTap) {
-            resetCardPosition();
-            onToggleReveal();
-            return;
-          }
-          onRelease(event, state);
-        },
-        onPanResponderTerminate: onRelease,
-      }),
-    [onRelease, onSwipeProgress, onToggleReveal, panX, resetCardPosition]
-  );
+  const tapGesture = Gesture.Tap()
+    .maxDistance(8)
+    .runOnJS(true)
+    .onEnd(() => {
+      resetCardPosition();
+      onToggleReveal();
+    });
+
+  const cardGesture = Gesture.Exclusive(panGesture, tapGesture);
 
   const tilt = panX.interpolate({
     inputRange: [-200, 0, 200],
@@ -155,29 +136,43 @@ export function AnimatedFlashcard({
           opacity: cardEntrance,
         },
       ]}>
-      <Animated.View style={styles.cardButton} {...responder.panHandlers}>
-        <Animated.View
-          style={[
-            styles.cardFace,
-            styles.frontFace,
-            { opacity: frontOpacity, transform: [{ rotateY: frontRotation }] },
-          ]}>
-          <Text style={styles.topLabel}>German</Text>
-          <Text style={styles.cardPrompt}>{frontText}</Text>
-          <Text style={styles.tapHint}>Tap to reveal translation</Text>
-        </Animated.View>
+      <GestureDetector gesture={cardGesture}>
+        <Animated.View style={styles.cardButton}>
+          <Animated.View
+            style={[
+              styles.cardFace,
+              styles.frontFace,
+              { opacity: frontOpacity, transform: [{ rotateY: frontRotation }] },
+            ]}>
+            <Text style={styles.topLabel}>German</Text>
+            <ScrollView
+              style={styles.cardTextScroll}
+              contentContainerStyle={styles.cardTextScrollContent}
+              nestedScrollEnabled
+              showsVerticalScrollIndicator={false}>
+              <Text style={styles.cardPrompt}>{frontText}</Text>
+            </ScrollView>
+            <Text style={styles.tapHint}>Tap to reveal translation</Text>
+          </Animated.View>
 
-        <Animated.View
-          style={[
-            styles.cardFace,
-            styles.backFace,
-            { opacity: backOpacity, transform: [{ rotateY: backRotation }] },
-          ]}>
-          <Text style={styles.topLabel}>English</Text>
-          <Text style={styles.cardAnswer}>{backText}</Text>
-          <Text style={styles.tapHint}>Tap to hide</Text>
+          <Animated.View
+            style={[
+              styles.cardFace,
+              styles.backFace,
+              { opacity: backOpacity, transform: [{ rotateY: backRotation }] },
+            ]}>
+            <Text style={styles.topLabel}>English</Text>
+            <ScrollView
+              style={styles.cardTextScroll}
+              contentContainerStyle={styles.cardTextScrollContent}
+              nestedScrollEnabled
+              showsVerticalScrollIndicator={false}>
+              <Text style={styles.cardAnswer}>{backText}</Text>
+            </ScrollView>
+            <Text style={styles.tapHint}>Tap to hide</Text>
+          </Animated.View>
         </Animated.View>
-      </Animated.View>
+      </GestureDetector>
     </Animated.View>
   );
 }
@@ -207,6 +202,15 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 7 },
     elevation: 5,
     justifyContent: 'space-between',
+  },
+  cardTextScroll: {
+    flex: 1,
+    alignSelf: 'stretch',
+  },
+  cardTextScrollContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    paddingVertical: 10,
   },
   frontFace: {
     backgroundColor: '#ffffff',

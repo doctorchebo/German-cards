@@ -1,19 +1,24 @@
-import { Audio } from 'expo-av';
+import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from 'expo-audio';
 
 type FeedbackType = 'right' | 'wrong';
+type CompletionFeedbackType = 'excellent' | 'bad';
 
 let configured = false;
-let correctSound: Audio.Sound | null = null;
-let wrongSound: Audio.Sound | null = null;
+let correctSound: AudioPlayer | null = null;
+let wrongSound: AudioPlayer | null = null;
+let excellentSound: AudioPlayer | null = null;
+let badSound: AudioPlayer | null = null;
 
-const CORRECT_SOUND_URI = 'https://actions.google.com/sounds/v1/alarms/beep_short.ogg';
 const WRONG_SOUND_URI = 'https://actions.google.com/sounds/v1/cartoon/wood_plank_flicks.ogg';
+const CORRECT_SOUND_ASSET = require('../../assets/sounds/ding.mp3');
+const EXCELLENT_SOUND_ASSET = require('../../assets/sounds/excelent.mp3');
+const BAD_SOUND_ASSET = require('../../assets/sounds/bad.mp3');
 
 async function configureAudio() {
   if (configured) return;
-  await Audio.setAudioModeAsync({
-    playsInSilentModeIOS: true,
-    shouldDuckAndroid: true,
+  await setAudioModeAsync({
+    playsInSilentMode: true,
+    interruptionMode: 'duckOthers',
   });
   configured = true;
 }
@@ -22,13 +27,23 @@ async function ensureLoaded() {
   await configureAudio();
 
   if (!correctSound) {
-    correctSound = new Audio.Sound();
-    await correctSound.loadAsync({ uri: CORRECT_SOUND_URI });
+    correctSound = createAudioPlayer(CORRECT_SOUND_ASSET, { downloadFirst: true });
   }
 
   if (!wrongSound) {
-    wrongSound = new Audio.Sound();
-    await wrongSound.loadAsync({ uri: WRONG_SOUND_URI });
+    wrongSound = createAudioPlayer(WRONG_SOUND_URI, { downloadFirst: true });
+  }
+}
+
+async function ensureCompletionSoundLoaded(type: CompletionFeedbackType) {
+  await configureAudio();
+
+  if (type === 'excellent' && !excellentSound) {
+    excellentSound = createAudioPlayer(EXCELLENT_SOUND_ASSET, { downloadFirst: true });
+  }
+
+  if (type === 'bad' && !badSound) {
+    badSound = createAudioPlayer(BAD_SOUND_ASSET, { downloadFirst: true });
   }
 }
 
@@ -45,7 +60,20 @@ export async function playFeedbackSound(type: FeedbackType) {
     await ensureLoaded();
     const sound = type === 'right' ? correctSound : wrongSound;
     if (!sound) return;
-    await sound.replayAsync();
+    await sound.seekTo(0);
+    sound.play();
+  } catch {
+    // Silent fallback.
+  }
+}
+
+export async function playCompletionFeedbackSound(type: CompletionFeedbackType) {
+  try {
+    await ensureCompletionSoundLoaded(type);
+    const sound = type === 'excellent' ? excellentSound : badSound;
+    if (!sound) return;
+    await sound.seekTo(0);
+    sound.play();
   } catch {
     // Silent fallback.
   }
@@ -53,11 +81,19 @@ export async function playFeedbackSound(type: FeedbackType) {
 
 export async function unloadFeedbackSounds() {
   if (correctSound) {
-    await correctSound.unloadAsync();
+    correctSound.remove();
     correctSound = null;
   }
   if (wrongSound) {
-    await wrongSound.unloadAsync();
+    wrongSound.remove();
     wrongSound = null;
+  }
+  if (excellentSound) {
+    excellentSound.remove();
+    excellentSound = null;
+  }
+  if (badSound) {
+    badSound.remove();
+    badSound = null;
   }
 }
