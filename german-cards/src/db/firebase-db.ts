@@ -43,6 +43,7 @@ type FlaggedCard = {
 let isReady = false;
 let readyPromise: Promise<void> | null = null;
 let sortedCardsCache: Card[] | null = null;
+let flaggedKeysCache: Set<string> | null = null;
 
 function sanitizeKey(input: string) {
   return input.trim().toLowerCase().replace(/[.#$\/[\]]/g, '_');
@@ -178,9 +179,11 @@ export async function createDrillSession(forcedCardIds: number[] = [], size = 50
   const app = getFirebaseApp();
   const db = getDatabase(app);
 
+  const isRetry = forcedCardIds.length > 0;
+
   const [cards, lastDrillCardIds] = await Promise.all([
     loadSortedCards(),
-    forcedCardIds.length > 0 ? Promise.resolve([]) : getLastDrillCardIds(),
+    isRetry ? Promise.resolve([]) : getLastDrillCardIds(),
   ]);
   const chosen = chooseDrillCards(cards, size, lastDrillCardIds, forcedCardIds);
 
@@ -194,10 +197,16 @@ export async function createDrillSession(forcedCardIds: number[] = [], size = 50
     cardIds: chosen.map((card) => card.id),
   };
 
-  await update(ref(db), {
-    [`drills/${drillRef.key}`]: drillPayload,
-    'meta/lastDrillCardIds': drillPayload.cardIds,
-  });
+  if (isRetry) {
+    update(ref(db), {
+      [`drills/${drillRef.key}`]: drillPayload,
+    }).catch(() => {});
+  } else {
+    await update(ref(db), {
+      [`drills/${drillRef.key}`]: drillPayload,
+      'meta/lastDrillCardIds': drillPayload.cardIds,
+    });
+  }
 
   return {
     drillId: drillRef.key,
@@ -355,6 +364,7 @@ export async function setCardFlag(cardKey: string, prompt: string, answer: strin
 
   if (!flagged) {
     await set(targetRef, null);
+    if (flaggedKeysCache) flaggedKeysCache.delete(cardKey);
     return;
   }
 
@@ -364,16 +374,23 @@ export async function setCardFlag(cardKey: string, prompt: string, answer: strin
     answer: answer.trim(),
     flaggedAt: Date.now(),
   } as FlaggedCard);
+  if (flaggedKeysCache) flaggedKeysCache.add(cardKey);
 }
 
 export async function getFlaggedCardKeys(): Promise<Set<string>> {
   await ensureDatabaseReady();
+  if (flaggedKeysCache) return new Set(flaggedKeysCache);
+
   const app = getFirebaseApp();
   const db = getDatabase(app);
   const snapshot = await get(ref(db, 'flaggedCardsByKey'));
-  if (!snapshot.exists()) return new Set<string>();
+  if (!snapshot.exists()) {
+    flaggedKeysCache = new Set<string>();
+    return flaggedKeysCache;
+  }
 
-  return new Set(Object.keys(snapshot.val() as Record<string, FlaggedCard>));
+  flaggedKeysCache = new Set(Object.keys(snapshot.val() as Record<string, FlaggedCard>));
+  return flaggedKeysCache;
 }
 
 export async function getFlaggedCards(): Promise<Card[]> {

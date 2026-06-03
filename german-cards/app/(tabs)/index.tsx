@@ -1,6 +1,14 @@
 import { useFocusEffect, useRouter } from "expo-router";
-import { useCallback, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useCallback, useEffect, useState } from "react";
+import {
+  ActivityIndicator,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { ensureDatabaseReady, getTotalStats } from "@/src/db/firebase-db";
@@ -23,18 +31,40 @@ const defaultStats: Stats = {
 export default function HomeScreen() {
   const router = useRouter();
   const [stats, setStats] = useState<Stats>(defaultStats);
+  const [statsLoading, setStatsLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [selectedDrillSize, setSelectedDrillSize] = useState<number | null>(
     null,
   );
   const [selectedMode, setSelectedMode] = useState<"de-en" | "en-de">("de-en");
 
+  const loadStats = useCallback(async () => {
+    await ensureDatabaseReady();
+    const freshStats = await getTotalStats();
+    setStats(freshStats);
+    setStatsLoading(false);
+  }, []);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await loadStats();
+    } finally {
+      setRefreshing(false);
+    }
+  }, [loadStats]);
+
   useFocusEffect(
     useCallback(() => {
       let active = true;
+      setStatsLoading(true);
       (async () => {
         await ensureDatabaseReady();
         const freshStats = await getTotalStats();
-        if (active) setStats(freshStats);
+        if (active) {
+          setStats(freshStats);
+          setStatsLoading(false);
+        }
       })();
       return () => {
         active = false;
@@ -47,6 +77,14 @@ export default function HomeScreen() {
       <ScrollView
         contentContainerStyle={styles.container}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={["#0f766e"]}
+            tintColor="#0f766e"
+          />
+        }
       >
         <View style={styles.headerRow}>
           <View style={styles.headerTextWrap}>
@@ -71,19 +109,43 @@ export default function HomeScreen() {
         <View style={styles.statsRow}>
           <View style={styles.statCard}>
             <Text style={styles.statLabel}>Cards</Text>
-            <Text style={styles.statValue}>{stats.cardCount}</Text>
+            {statsLoading ? (
+              <View style={styles.skeletonValue}>
+                <ActivityIndicator size="small" color="#94a3b8" />
+              </View>
+            ) : (
+              <Text style={styles.statValue}>{stats.cardCount}</Text>
+            )}
           </View>
           <View style={styles.statCard}>
             <Text style={styles.statLabel}>Drills</Text>
-            <Text style={styles.statValue}>{stats.drillsCompleted}</Text>
+            {statsLoading ? (
+              <View style={styles.skeletonValue}>
+                <ActivityIndicator size="small" color="#94a3b8" />
+              </View>
+            ) : (
+              <Text style={styles.statValue}>{stats.drillsCompleted}</Text>
+            )}
           </View>
           <View style={styles.statCard}>
             <Text style={styles.statLabel}>Right</Text>
-            <Text style={styles.statValue}>{stats.rightAnswers}</Text>
+            {statsLoading ? (
+              <View style={styles.skeletonValue}>
+                <ActivityIndicator size="small" color="#94a3b8" />
+              </View>
+            ) : (
+              <Text style={styles.statValue}>{stats.rightAnswers}</Text>
+            )}
           </View>
           <View style={styles.statCard}>
             <Text style={styles.statLabel}>Wrong</Text>
-            <Text style={styles.statValue}>{stats.wrongAnswers}</Text>
+            {statsLoading ? (
+              <View style={styles.skeletonValue}>
+                <ActivityIndicator size="small" color="#94a3b8" />
+              </View>
+            ) : (
+              <Text style={styles.statValue}>{stats.wrongAnswers}</Text>
+            )}
           </View>
         </View>
 
@@ -290,6 +352,12 @@ const styles = StyleSheet.create({
     fontSize: 24,
     color: "#0f172a",
     fontWeight: "800",
+  },
+  skeletonValue: {
+    marginTop: 6,
+    height: 30,
+    alignItems: "center",
+    justifyContent: "center",
   },
   primaryButton: {
     marginTop: 6,

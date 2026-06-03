@@ -4,6 +4,7 @@ import * as Speech from "expo-speech";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
+  Dimensions,
   Keyboard,
   Modal,
   Pressable,
@@ -67,6 +68,7 @@ export default function DrillScreen() {
   const [editAnswer, setEditAnswer] = useState("");
   const [savingEdit, setSavingEdit] = useState(false);
   const [loadingError, setLoadingError] = useState("");
+  const [menuOpen, setMenuOpen] = useState(false);
   const resultRef = useRef<{
     right: number;
     wrong: number;
@@ -231,6 +233,14 @@ export default function DrillScreen() {
     });
   };
 
+  const toggleMenu = () => {
+    setMenuOpen((prev) => !prev);
+  };
+
+  const closeMenu = () => {
+    setMenuOpen(false);
+  };
+
   const onToggleFlag = async () => {
     if (!currentCard) return;
     const nextFlagState = !isCurrentFlagged;
@@ -324,13 +334,8 @@ export default function DrillScreen() {
 
         <View style={styles.cardStage}>
           <View style={styles.cardTopRightActions}>
-            <Pressable style={styles.cardActionButton} onPress={onOpenEdit}>
-              <Text style={styles.cardActionText}>Edit</Text>
-            </Pressable>
-            <Pressable style={styles.cardActionButton} onPress={onToggleFlag}>
-              <Text style={styles.cardActionText}>
-                {isCurrentFlagged ? "Unflag" : "Flag"}
-              </Text>
+            <Pressable style={styles.cardMenuButton} onPress={toggleMenu}>
+              <MaterialIcons name="more-vert" size={20} color="#115e59" />
             </Pressable>
           </View>
           <View
@@ -364,6 +369,39 @@ export default function DrillScreen() {
             onSwipeProgress={setSwipeDx}
           />
         </View>
+
+        {menuOpen && (
+          <Pressable style={styles.menuBackdrop} onPress={closeMenu}>
+            <View style={styles.dropdownMenu}>
+              <Pressable
+                style={styles.dropdownItem}
+                onPress={() => {
+                  closeMenu();
+                  onOpenEdit();
+                }}
+              >
+                <MaterialIcons name="edit" size={18} color="#334155" />
+                <Text style={styles.dropdownItemText}>Edit</Text>
+              </Pressable>
+              <Pressable
+                style={styles.dropdownItem}
+                onPress={() => {
+                  closeMenu();
+                  onToggleFlag();
+                }}
+              >
+                <MaterialIcons
+                  name={isCurrentFlagged ? "flag" : "outlined-flag"}
+                  size={18}
+                  color="#334155"
+                />
+                <Text style={styles.dropdownItemText}>
+                  {isCurrentFlagged ? "Unflag" : "Flag"}
+                </Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        )}
 
         <View style={styles.answerBox}>
           <Text style={styles.inputLabel}>Type translation (optional)</Text>
@@ -483,24 +521,51 @@ const styles = StyleSheet.create({
   },
   cardTopRightActions: {
     position: "absolute",
-    top: 0,
-    right: 0,
+    top: -6,
+    right: -12,
     zIndex: 4,
-    flexDirection: "row",
-    gap: 8,
   },
-  cardActionButton: {
+  cardMenuButton: {
     borderWidth: 1,
     borderColor: "#bfe3dc",
     backgroundColor: "#ffffff",
     borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    padding: 6,
   },
-  cardActionText: {
-    color: "#115e59",
-    fontWeight: "700",
-    fontSize: 12,
+  menuBackdrop: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    zIndex: 10,
+  },
+  dropdownMenu: {
+    position: "absolute",
+    top: 28,
+    right: 0,
+    backgroundColor: "#ffffff",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#d2e8e4",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 4,
+    minWidth: 140,
+  },
+  dropdownItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    gap: 10,
+  },
+  dropdownItemText: {
+    color: "#334155",
+    fontWeight: "600",
+    fontSize: 14,
   },
   swipeScreenOverlay: {
     position: "absolute",

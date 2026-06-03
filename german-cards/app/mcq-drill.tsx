@@ -1,5 +1,5 @@
-import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -24,16 +24,19 @@ export default function McqDrillScreen() {
     }
     return copy;
   };
+
+  const sourceDrills =
+    type === "conjugations"
+      ? conjugationExercises
+      : type === "articles"
+        ? articleCaseExercises
+        : prepositionExercises;
+
+  const [sessionKey, setSessionKey] = useState(0);
   const drills = useMemo(
-    () =>
-      shuffle(
-        type === "conjugations"
-          ? conjugationExercises
-          : type === "articles"
-            ? articleCaseExercises
-            : prepositionExercises,
-      ),
-    [type],
+    () => shuffle(sourceDrills),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [sessionKey, type],
   );
   const [selectedSize, setSelectedSize] = useState<number | null>(null);
   const limitedDrills = useMemo(
@@ -51,26 +54,26 @@ export default function McqDrillScreen() {
   const [index, setIndex] = useState(0);
   const [selected, setSelected] = useState<string | null>(null);
   const [right, setRight] = useState(0);
-  const [answers, setAnswers] = useState<(string | null)[]>(
-    () => limitedDrills.map(() => null),
-  );
+  const [answers, setAnswers] = useState<(string | null)[]>([]);
   const [showReview, setShowReview] = useState(false);
 
-  useEffect(() => {
-    setSelectedSize(null);
-    setIndex(0);
-    setSelected(null);
-    setRight(0);
-    setShowReview(false);
-  }, [type]);
+  useFocusEffect(
+    useCallback(() => {
+      setSessionKey((prev) => prev + 1);
+      setSelectedSize(null);
+      setIndex(0);
+      setSelected(null);
+      setRight(0);
+      setShowReview(false);
+      setAnswers([]);
+    }, [type]),
+  );
 
   useEffect(() => {
-    setIndex(0);
-    setSelected(null);
-    setRight(0);
-    setShowReview(false);
-    setAnswers(limitedDrills.map(() => null));
-  }, [selectedSize, limitedDrills]);
+    if (answers.length === 0 && limitedDrills.length > 0) {
+      setAnswers(limitedDrills.map(() => null));
+    }
+  }, [limitedDrills]);
 
   const current = limitedDrills[index];
   const finished = index >= limitedDrills.length;

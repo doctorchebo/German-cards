@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef } from 'react';
 import {
   Animated,
-  ScrollView,
   StyleSheet,
   Text,
+  View,
 } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 
@@ -18,6 +18,14 @@ type Props = {
   onSwipeRight: () => void;
   onSwipeProgress?: (dx: number) => void;
 };
+
+function getFontSize(length: number, base: number): number {
+  if (length < 30) return base;
+  if (length < 60) return base - 6;
+  if (length < 100) return base - 12;
+  if (length < 150) return base - 16;
+  return base - 20;
+}
 
 export function AnimatedFlashcard({
   frontText,
@@ -122,6 +130,10 @@ export function AnimatedFlashcard({
     inputRange: [0, 0.5, 1],
     outputRange: [0, 0, 1],
   });
+
+  const frontFontSize = getFontSize(frontText.length, 34);
+  const backFontSize = getFontSize(backText.length, 30);
+
   return (
     <Animated.View
       style={[
@@ -145,13 +157,11 @@ export function AnimatedFlashcard({
               { opacity: frontOpacity, transform: [{ rotateY: frontRotation }] },
             ]}>
             <Text style={styles.topLabel}>German</Text>
-            <ScrollView
-              style={styles.cardTextScroll}
-              contentContainerStyle={styles.cardTextScrollContent}
-              nestedScrollEnabled
-              showsVerticalScrollIndicator={false}>
-              <Text style={styles.cardPrompt}>{frontText}</Text>
-            </ScrollView>
+            <View style={styles.cardTextWrap}>
+              <Text style={[styles.cardPrompt, { fontSize: frontFontSize }]} numberOfLines={0} adjustsFontSizeToFit>
+                {frontText}
+              </Text>
+            </View>
             <Text style={styles.tapHint}>Tap to reveal translation</Text>
           </Animated.View>
 
@@ -161,14 +171,12 @@ export function AnimatedFlashcard({
               styles.backFace,
               { opacity: backOpacity, transform: [{ rotateY: backRotation }] },
             ]}>
-            <Text style={styles.topLabel}>English</Text>
-            <ScrollView
-              style={styles.cardTextScroll}
-              contentContainerStyle={styles.cardTextScrollContent}
-              nestedScrollEnabled
-              showsVerticalScrollIndicator={false}>
-              <Text style={styles.cardAnswer}>{backText}</Text>
-            </ScrollView>
+            <Text style={[styles.topLabel, { color: '#94a3b8' }]}>English</Text>
+            <View style={styles.cardTextWrap}>
+              <Text style={[styles.cardAnswer, { fontSize: backFontSize }]} numberOfLines={0} adjustsFontSizeToFit>
+                {backText}
+              </Text>
+            </View>
             <Text style={styles.tapHint}>Tap to hide</Text>
           </Animated.View>
         </Animated.View>
@@ -203,12 +211,8 @@ const styles = StyleSheet.create({
     elevation: 5,
     justifyContent: 'space-between',
   },
-  cardTextScroll: {
+  cardTextWrap: {
     flex: 1,
-    alignSelf: 'stretch',
-  },
-  cardTextScrollContent: {
-    flexGrow: 1,
     justifyContent: 'center',
     paddingVertical: 10,
   },
@@ -228,16 +232,16 @@ const styles = StyleSheet.create({
     color: '#64748b',
   },
   cardPrompt: {
-    fontSize: 34,
     fontWeight: '800',
     color: '#0f172a',
     textAlign: 'center',
+    lineHeight: undefined,
   },
   cardAnswer: {
-    fontSize: 30,
     fontWeight: '800',
     color: '#f8fafc',
     textAlign: 'center',
+    lineHeight: undefined,
   },
   tapHint: {
     fontSize: 14,
