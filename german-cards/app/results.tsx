@@ -91,11 +91,11 @@ function ConfettiOverlay() {
 
 export default function ResultsScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ right?: string; wrong?: string; wrongIds?: string; size?: string; mode?: string }>();
+  const params = useLocalSearchParams<{ right?: string; wrong?: string; wrongKeys?: string; size?: string; mode?: string }>();
 
   const right = Number(params.right ?? 0);
   const wrong = Number(params.wrong ?? 0);
-  const wrongIds = (params.wrongIds ?? '').trim();
+  const wrongKeys = (params.wrongKeys ?? '').trim();
   const size = Number(params.size ?? 50);
   const safeSize = size === 10 || size === 25 || size === 50 ? size : 50;
   const mode = params.mode === 'en-de' ? 'en-de' : 'de-en';
@@ -125,10 +125,10 @@ export default function ResultsScreen() {
         </Pressable>
 
         <Pressable
-          style={[styles.secondaryButton, !wrongIds && styles.disabled]}
-          disabled={!wrongIds}
+          style={[styles.secondaryButton, !wrongKeys && styles.disabled]}
+          disabled={!wrongKeys}
           onPress={() =>
-            router.replace(`/drill?retryIds=${encodeURIComponent(wrongIds)}&size=${safeSize}&mode=${mode}`)
+            router.replace(`/drill?retryKeys=${encodeURIComponent(wrongKeys)}&size=${safeSize}&mode=${mode}`)
           }>
           <Text style={styles.secondaryButtonText}>Retry Wrong Cards</Text>
         </Pressable>

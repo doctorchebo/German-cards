@@ -40,12 +40,12 @@ type Feedback = {
 export default function DrillScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{
-    retryIds?: string;
+    retryKeys?: string;
     size?: string;
     mode?: string;
   }>();
-  const retryIdsParam =
-    typeof params.retryIds === "string" ? params.retryIds : "";
+  const retryKeysParam =
+    typeof params.retryKeys === "string" ? params.retryKeys : "";
   const sizeParam = typeof params.size === "string" ? Number(params.size) : NaN;
   const drillSize =
     sizeParam === 10 || sizeParam === 25 || sizeParam === 50 ? sizeParam : 50;
@@ -72,20 +72,20 @@ export default function DrillScreen() {
   const resultRef = useRef<{
     right: number;
     wrong: number;
-    wrongCardIds: number[];
+    wrongCardKeys: string[];
   }>({
     right: 0,
     wrong: 0,
-    wrongCardIds: [],
+    wrongCardKeys: [],
   });
 
-  const retryIds = useMemo(
+  const retryKeys = useMemo(
     () =>
-      (retryIdsParam ?? "")
+      (retryKeysParam ?? "")
         .split(",")
-        .map((value) => Number(value.trim()))
-        .filter((value) => Number.isFinite(value) && value > 0),
-    [retryIdsParam],
+        .map((value: string) => decodeURIComponent(value.trim()))
+        .filter((value: string) => value.length > 0),
+    [retryKeysParam],
   );
 
   useEffect(() => {
@@ -105,11 +105,11 @@ export default function DrillScreen() {
       setFeedback({ type: null, message: "" });
       setAnsweredCurrent(false);
       setLoadingError("");
-      resultRef.current = { right: 0, wrong: 0, wrongCardIds: [] };
+      resultRef.current = { right: 0, wrong: 0, wrongCardKeys: [] };
 
       try {
         const [drill, flags] = await Promise.all([
-          createDrillSession(retryIds, drillSize),
+          createDrillSession([], drillSize, retryKeys),
           getFlaggedCardKeys(),
         ]);
         if (active) {
@@ -126,7 +126,7 @@ export default function DrillScreen() {
     return () => {
       active = false;
     };
-  }, [drillSize, retryIds, retryIdsParam, mode]);
+  }, [drillSize, retryKeys, retryKeysParam, mode]);
 
   const currentCard = session?.cards[currentIndex];
   const frontText =
@@ -144,11 +144,11 @@ export default function DrillScreen() {
   const moveNext = () => {
     if (!session) return;
     if (currentIndex >= session.cards.length - 1) {
-      const wrongIds = Array.from(new Set(resultRef.current.wrongCardIds));
+      const wrongKeys = Array.from(new Set(resultRef.current.wrongCardKeys));
       const query = new URLSearchParams({
         right: String(resultRef.current.right),
         wrong: String(resultRef.current.wrong),
-        wrongIds: wrongIds.join(","),
+        wrongKeys: wrongKeys.map((k) => encodeURIComponent(k)).join(","),
         size: String(drillSize),
         mode,
       }).toString();
@@ -187,7 +187,7 @@ export default function DrillScreen() {
       }
     } else {
       resultRef.current.wrong += 1;
-      resultRef.current.wrongCardIds.push(currentCard.id);
+      resultRef.current.wrongCardKeys.push(currentCard.key);
       if (!isSwipe) {
         await playFeedbackSound("wrong");
         setFeedback({

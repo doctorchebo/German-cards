@@ -174,18 +174,18 @@ async function getLastDrillCardIds(): Promise<number[]> {
   return Array.isArray(cardIds) ? cardIds.filter((id) => typeof id === 'number') : [];
 }
 
-export async function createDrillSession(forcedCardIds: number[] = [], size = 50): Promise<DrillSession> {
+export async function createDrillSession(forcedCardIds: number[] = [], size = 50, forcedCardKeys: string[] = []): Promise<DrillSession> {
   await ensureDatabaseReady();
   const app = getFirebaseApp();
   const db = getDatabase(app);
 
-  const isRetry = forcedCardIds.length > 0;
+  const isRetry = forcedCardKeys.length > 0 || forcedCardIds.length > 0;
 
   const [cards, lastDrillCardIds] = await Promise.all([
     loadSortedCards(),
     isRetry ? Promise.resolve([]) : getLastDrillCardIds(),
   ]);
-  const chosen = chooseDrillCards(cards, size, lastDrillCardIds, forcedCardIds);
+  const chosen = chooseDrillCards(cards, size, lastDrillCardIds, forcedCardIds, forcedCardKeys);
 
   const drillRef = push(ref(db, 'drills'));
   if (!drillRef.key) {

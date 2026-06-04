@@ -13,11 +13,18 @@ export function chooseDrillCards(
   cards: Card[],
   size = 50,
   lastDrillCardIds: number[] = [],
-  forcedCardIds: number[] = []
+  forcedCardIds: number[] = [],
+  forcedCardKeys: string[] = []
 ): Card[] {
   if (cards.length === 0) return [];
 
   const targetSize = Math.min(size, cards.length);
+
+  if (forcedCardKeys.length > 0) {
+    const forcedKeySet = new Set(forcedCardKeys);
+    const forcedCards = cards.filter((card) => card.key != null && forcedKeySet.has(card.key));
+    return shuffle(forcedCards).slice(0, targetSize);
+  }
 
   if (forcedCardIds.length > 0) {
     const forcedSet = new Set(forcedCardIds);
