@@ -139,19 +139,47 @@ async function signIn(email, password) {
   return authData.idToken;
 }
 
+async function fetchExistingCards(url) {
+  const res = await fetch(url);
+  if (!res.ok) {
+    return {};
+  }
+  return (await res.json()) || {};
+}
+
 async function run() {
   const seedCards = loadSeedCards();
-  const payload = buildPayload(seedCards);
+  const fullPayload = buildPayload(seedCards);
 
   console.log(`Loaded ${seedCards.length} cards from src/data/seed-cards.ts`);
-  console.log(`Prepared ${Object.keys(payload).length} cards.`);
-  console.log(`Pushing to: ${DATABASE_URL}/cardsByKey.json`);
+  console.log(`Prepared ${Object.keys(fullPayload).length} cards.`);
 
   const url = `${DATABASE_URL}/cardsByKey.json`;
-  const firstAttempt = await uploadPayload(url, payload);
+  
+  console.log("Fetching existing cards from Firebase to avoid redundant uploads...");
+  const existingCards = await fetchExistingCards(url);
+  
+  const newPayload = {};
+  let newCount = 0;
+  
+  for (const [key, cardData] of Object.entries(fullPayload)) {
+    if (!existingCards[key]) {
+      newPayload[key] = cardData;
+      newCount++;
+    }
+  }
+
+  if (newCount === 0) {
+    console.log("All cards already exist in Firebase. Nothing to upload.");
+    return;
+  }
+
+  console.log(`Found ${newCount} new cards to upload. Pushing to Firebase...`);
+
+  const firstAttempt = await uploadPayload(url, newPayload);
 
   if (firstAttempt.ok) {
-    console.log(`Successfully imported ${Object.keys(payload).length} cards to Firebase.`);
+    console.log(`Successfully imported ${newCount} new cards to Firebase.`);
     return;
   }
 
@@ -166,14 +194,14 @@ async function run() {
 
   try {
     const idToken = await signIn(email, password);
-    const secondAttempt = await uploadPayload(url, payload, idToken);
+    const secondAttempt = await uploadPayload(url, newPayload, idToken);
 
     if (!secondAttempt.ok) {
       console.error("Import failed after auth:", await secondAttempt.text());
       process.exit(1);
     }
 
-    console.log(`Successfully imported ${Object.keys(payload).length} cards to Firebase.`);
+    console.log(`Successfully imported ${newCount} new cards to Firebase.`);
   } catch (err) {
     console.error("Error during auth/upload:", err);
     process.exit(1);

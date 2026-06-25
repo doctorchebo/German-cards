@@ -6,6 +6,7 @@ export type Card = {
   language: LanguageCode;
   prompt: string;
   answer: string;
+  category?: string;
 };
 
 export type DrillCard = {
@@ -13,6 +14,7 @@ export type DrillCard = {
   key: string;
   prompt: string;
   answer: string;
+  category?: string;
 };
 
 export type DrillSession = {
